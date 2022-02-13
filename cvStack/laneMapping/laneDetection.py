@@ -6,8 +6,9 @@ import time
 import numpy as np
 import matplotlib as plt
 from zedRecording import ZEDRecording
+from ADSDetection import ADSDetection
 
-def main(): 
+def main():
     if len(sys.argv) != 2:
         print("Please specify path to .svo file.")
         exit()
@@ -18,32 +19,52 @@ def main():
     cam = ZEDRecording(filepath)
 
     # runtime_parameters = sl.RuntimeParameters()
+    frames = []
+    run = True
     while True:
         try:
-            grab = cam.grab()
-            print(type(grab))
-            #cv2.imshow("Image", grab)
-            #cv2.waitKey(1)
 
-            raw_image = grab
+            if run :
+                grab = cam.grab()
+                print(type(grab))
+                #cv2.imshow("RawImage", grab)
+                #cv2.waitKey(0)
 
-            #   Perspective Transform
-            #source_points = np.float32([[580, 460], [205, 720], [1110, 720], [703, 460]]) #Old points
-            #destination_points = np.float32([[320, 0], [320, 720], [960, 720], [960, 0]]) #Old points
-            source_points = np.float32([[400, 400], [100, 500], [820, 400], [1200, 500]]) #new points
-            destination_points = np.float32([[0, 0], [100, 500], [1200, 0], [1200, 500]]) #new points
+                edges = ADSDetection(grab)
+                EdImage = edges.returnEDImage()
+                HoughImage = edges.returnHougedImage()
+                # cv2.imshow("EdgesImage", EdImage)
+                # cv2.waitKey(1)
+                # cv2.imshow("EdgesImage", HoughImage)
+                # cv2.waitKey(0)
+                frames.append(HoughImage)
 
-            shape = (raw_image.shape[1], raw_image.shape[0])
-            warp_matrix = cv2.getPerspectiveTransform(source_points, destination_points)
-            warp_image = cv2.warpPerspective(raw_image, warp_matrix, shape, flags = cv2.INTER_LINEAR)
+                #   Perspective Transform
+                #source_points = np.float32([[580, 460], [205, 720], [1110, 720], [703, 460]]) #Old points
+                #destination_points = np.float32([[320, 0], [320, 720], [960, 720], [960, 0]]) #Old points
+                source_points = np.float32([[400, 400], [100, 500], [1200, 500], [820, 400]]) #new points
+                destination_points = np.float32([[0, 0], [100, 500], [1200, 500], [1200, 0]]) #new points
+                """
+                #New Points
+                source_points = np.float32([[518, 485], [750, 500], [402, 555], [865, 570]]) #new points (2) works for ~44.svo
+                destination_points = np.float32([[0, 0], [1200, 0], [0, 500], [1200, 500]]) #new points (2)
+                source_points = np.float32([[518, 485], [745, 495], [410, 530], [825, 540]]) #new points (3) works for ~44.svo
+                destination_points = np.float32([[0, 0], [1200, 0], [0, 500], [1200, 500]]) #new points (3)
+                """
+                run = False
+            else:
+                run = True
+            
 
-            display_images = np.concatenate((warp_image, raw_image), axis = 1)
+            # shape = (grab.shape[1], grab.shape[0])
+            # warp_matrix = cv2.getPerspectiveTransform(source_points, destination_points)
+            # warp_image = cv2.warpPerspective(EdImage, warp_matrix, shape, flags = cv2.INTER_LINEAR)
+
+            # display_images = np.concatenate((warp_image, EdImage), axis = 1)
 
             #Display the warped image
-            #plt.imshow(warp_image)
-            #plt.show()
-            cv2.imshow("Warped Image", warp_image)
-            cv2.waitKey(1)
+            # cv2.imshow("Warped Image", warp_image)
+            # cv2.waitKey(1)
 
             #Display the two images wide by side
             #cv2.imshow("Image", display_images)
@@ -54,8 +75,15 @@ def main():
             break
 
     cam.close()
+    height, width, dummy = frames[0].shape
+    size = (width,height)
+    out = cv2.VideoWriter('project.avi',cv2.VideoWriter_fourcc(*'DIVX'), 30, size)
+    
+    
+    for i in range(len(frames)):
+        out.write(frames[i])
+    out.release()
 
 if __name__ == "__main__":
     main()
 
-        
