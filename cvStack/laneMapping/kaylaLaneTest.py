@@ -246,7 +246,7 @@ def main():
     edges = cv2.Canny(copy,50,150)
     isolated = region(edges)
     gray = grey(raw_image)
-    gray_warped = grey(warp_image)
+    warp_image = grey(warp_image)
     #cv2.imshow("edges", edges)
     #cv2.imshow("isolated", isolated)
     cv2.imwrite("laneTestEdges.jpg", edges)
@@ -257,7 +257,7 @@ def main():
 
     #DRAWING LINES: (order of params) --> region of interest, bin size (P, theta), min intersections needed, placeholder array, 
     lines = cv2.HoughLinesP(isolated, 2, np.pi/180, 100, np.array([]), minLineLength=40, maxLineGap=5)
-    circles = cv2.HoughCircles(gray_warped, cv2.HOUGH_GRADIENT, 1, 10)
+    # circles = cv2.HoughCircles(gray_warped, cv2.HOUGH_GRADIENT, 1, 10)
     averaged_lines = average(copy, lines)
     black_lines = display_lines(copy, averaged_lines)
     #taking wighted sum of original image and lane lines image
@@ -270,26 +270,26 @@ def main():
     cv2.imwrite("laneTestOutput.jpg", lanes)
     
     #ensure at least some circles were found
-    if circles is not None:
-        # convert the (x, y) coordinates and radius of the circles to integers
-        circles = np.round(circles[0, :]).astype("int")
-        # loop over the (x, y) coordinates and radius of the circles
-        for (x, y, r) in circles:
-            # draw the circle in the output image, then draw a rectangle
-            # corresponding to the center of the circle
-            cv2.circle(output, (x, y), r, (0, 255, 0), 4)
-            #cv2.rectangle(output, (x - 5, y - 5), (x + 5, y + 5), (0, 128, 255), -1)
-        # show the output image
-        lane_and_circle = np.concatenate((lanes, output), axis = 1)
-        #cv2.imshow("output", lane_and_circle)
-        #cv2.waitKey(0)
-        print("Circle found")
-        cv2.imwrite("laneTestOtputLaneNCircle.jpg", lane_and_circle)
-    else:
-        #cv2.imshow("lane window", lanes)
-        #cv2.waitKey(0)
-        print("Circle Not Found")
-        cv2.imwrite("laneTestLaneWindow.jpg", lanes)
+    # if circles is not None:
+    #     # convert the (x, y) coordinates and radius of the circles to integers
+    #     circles = np.round(circles[0, :]).astype("int")
+    #     # loop over the (x, y) coordinates and radius of the circles
+    #     for (x, y, r) in circles:
+    #         # draw the circle in the output image, then draw a rectangle
+    #         # corresponding to the center of the circle
+    #         cv2.circle(output, (x, y), r, (0, 255, 0), 4)
+    #         #cv2.rectangle(output, (x - 5, y - 5), (x + 5, y + 5), (0, 128, 255), -1)
+    #     # show the output image
+    #     lane_and_circle = np.concatenate((lanes, output), axis = 1)
+    #     #cv2.imshow("output", lane_and_circle)
+    #     #cv2.waitKey(0)
+    #     print("Circle found")
+    #     cv2.imwrite("laneTestOutputLaneNCircle.jpg", lane_and_circle)
+    # else:
+    #     #cv2.imshow("lane window", lanes)
+    #     #cv2.waitKey(0)
+    #     print("Circle Not Found")
+    #     cv2.imwrite("laneTestLaneWindow.jpg", lanes)
 
     #END
 
@@ -329,7 +329,7 @@ def main():
     
     # Set Circularity filtering parameters
     params_w.filterByCircularity = True
-    params_w.minCircularity = 0.3
+    params_w.minCircularity = 0.4
     
     # Set Convexity filtering parameters
     params_w.filterByConvexity = True
@@ -356,39 +356,41 @@ def main():
     warp_edges = cv2.GaussianBlur(warp_edges, (5,5), 0) #Blur edges
     warp_edges = cv2.GaussianBlur(warp_edges, (5,5), 0) #Blur edges
     warp_edges = cv2.GaussianBlur(warp_edges, (5,5), 0) #Blur edges
+    warp_edges = cv2.GaussianBlur(warp_edges, (5,5), 0) #Blur edges
+    warp_edges = cv2.GaussianBlur(warp_edges, (5,5), 0) #Blur edges
 
-    warp_edges = cv2.inRange(warp_edges, 1, 255)
+    # warp_edges = cv2.inRange(warp_edges, 1, 255)
 
-    #warp_edges = cv2.bitwise_and(warp_edges, warp_edges, mask=mask)
+    # #warp_edges = cv2.bitwise_and(warp_edges, warp_edges, mask=mask)
 
     keypointsWarp = detector_w.detect(warp_edges)
     
-    # Draw blobs on our image as red circles
+    # # Draw blobs on our image as red circles
     blank = np.zeros((1, 1))
-    blobs = cv2.drawKeypoints(isolated, keypoints, blank, (0, 255, 0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    # blobs = cv2.drawKeypoints(isolated, keypoints, blank, (0, 255, 0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
     blobsWarp = cv2.drawKeypoints(warp_edges, keypointsWarp, blank, (0, 255, 0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
-    for point in keypoints:
-        (x, y) = point.pt
-        cv2.circle(lanes,(round(x), round(y)), 20, (0,255,0), 3)
+    # for point in keypoints:
+    #     (x, y) = point.pt
+    #     cv2.circle(lanes,(round(x), round(y)), 20, (0,255,0), 3)
     
-    for point in keypointsWarp:
-        (x, y) = point.pt
-        cv2.circle(blobsWarp,(round(x), round(y)), 20, (0,255,0), 3)
+    # for point in keypointsWarp:
+    #     (x, y) = point.pt
+    #     cv2.circle(blobsWarp,(round(x), round(y)), 20, (0,255,0), 3)
     
-    number_of_blobs = len(keypoints)
-    text = "Number of Circular Blobs: " + str(number_of_blobs)
-    text_warp = "Number of Circular Blobs (Warped): " + str(len(keypointsWarp))
-    cv2.putText(blobs, text, (20, 550), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 100, 255), 2)
-    cv2.putText(lanes, text, (20, 550), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 100, 255), 2)
-    cv2.putText(blobsWarp, text_warp, (20, 550), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 100, 255), 2)
+    # number_of_blobs = len(keypoints)
+    # text = "Number of Circular Blobs: " + str(number_of_blobs)
+    # text_warp = "Number of Circular Blobs (Warped): " + str(len(keypointsWarp))
+    # cv2.putText(blobs, text, (20, 550), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 100, 255), 2)
+    # cv2.putText(lanes, text, (20, 550), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 100, 255), 2)
+    # cv2.putText(blobsWarp, text_warp, (20, 550), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 100, 255), 2)
     
-    # Show blobs
-    cv2.imwrite("laneTestBlob.jpg", blobs)
-    cv2.imwrite("laneTestLaneNBlob.jpg", lanes)
+    # # Show blobs
+    # cv2.imwrite("laneTestBlob.jpg", blobs)
+    # cv2.imwrite("laneTestLaneNBlob.jpg", lanes)
     cv2.imwrite("laneTestWarpBlob.jpg", blobsWarp)
 
-    print(number_of_blobs, " blobs found")
+    # print(number_of_blobs, " blobs found")
 
     cam.close()
 

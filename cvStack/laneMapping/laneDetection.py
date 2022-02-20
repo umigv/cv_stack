@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib as plt
 from zedRecording import ZEDRecording
 from ADSDetection import ADSDetection
+from kaylaLaneDetectionCopy import kaylaLane
 
 def main():
     if len(sys.argv) != 2:
@@ -23,21 +24,29 @@ def main():
     run = True
     while True:
         try:
-
             if run :
                 grab = cam.grab()
                 print(type(grab))
                 #cv2.imshow("RawImage", grab)
                 #cv2.waitKey(0)
 
+                #ADS Detection
+                '''
                 edges = ADSDetection(grab)
                 EdImage = edges.returnEDImage()
                 HoughImage = edges.returnHougedImage()
+                '''
+
+                #kaylaLaneTest
+
+                edges = kaylaLane(grab)
+                laneImage = edges.returnLaneTest()
+
                 # cv2.imshow("EdgesImage", EdImage)
                 # cv2.waitKey(1)
                 # cv2.imshow("EdgesImage", HoughImage)
                 # cv2.waitKey(0)
-                frames.append(HoughImage)
+                frames.append(laneImage)
 
                 #   Perspective Transform
                 #source_points = np.float32([[580, 460], [205, 720], [1110, 720], [703, 460]]) #Old points
