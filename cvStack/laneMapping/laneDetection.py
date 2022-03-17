@@ -31,17 +31,17 @@ def main():
                 #cv2.waitKey(0)
 
                 #ADS Detection
-                '''
+                
                 edges = ADSDetection(grab)
                 EdImage = edges.returnEDImage()
                 HoughImage = edges.returnHougedImage()
+                laneImage = HoughImage
+
+                #kaylaLaneTest (not working)
                 '''
-
-                #kaylaLaneTest
-
                 edges = kaylaLane(grab)
                 laneImage = edges.returnLaneTest()
-
+                '''
                 # cv2.imshow("EdgesImage", EdImage)
                 # cv2.waitKey(1)
                 # cv2.imshow("EdgesImage", HoughImage)
@@ -75,7 +75,7 @@ def main():
             # cv2.imshow("Warped Image", warp_image)
             # cv2.waitKey(1)
 
-            #Display the two images wide by side
+            #Display the two images side by side
             #cv2.imshow("Image", display_images)
             #cv2.waitKey(1)
 
@@ -84,9 +84,10 @@ def main():
             break
 
     cam.close()
-    height, width, dummy = frames[0].shape
-    size = (width,height)
-    out = cv2.VideoWriter('project.avi',cv2.VideoWriter_fourcc(*'DIVX'), 30, size)
+    size = frames[0].shape[:2]
+    #height, width, dummy = frames[0].shape
+    #size = (width,height)
+    out = cv2.VideoWriter('project.avi',cv2.VideoWriter_fourcc(*'DIVX'), 30, (size[1], size[0]))
     
     
     for i in range(len(frames)):

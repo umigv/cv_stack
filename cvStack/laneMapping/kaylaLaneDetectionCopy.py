@@ -1,4 +1,5 @@
 import sys
+import math
 import pyzed.sl as sl
 import cv2
 import time
@@ -95,9 +96,13 @@ class kaylaLane:
         #how long we want our lines to be --> 3/5 the size of the image
         y2 = int(y1 * (3/5))
         #determine algebraically
-        x1 = int((y1 - y_int) // slope)
-        x2 = int((y2 - y_int) // slope)
-        return np.array([x1, y1, x2, y2])
+        if slope != 0:
+            x1 = int((y1 - y_int) // slope)
+            x2 = int((y2 - y_int) // slope)
+            return np.array([x1, y1, x2, y2])
+        else:
+        #if the slope equals zero, return all zeroes
+            return np.array([0, 0, 0, 0])
 
     #from google.colab.patches import cv2_imshow
 
