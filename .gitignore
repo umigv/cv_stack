@@ -1,2 +1,9 @@
 Recordings/*
 __pycache__
+
+# Swap Files
+*.swo
+*.swp
+
+# tags file
+tags
