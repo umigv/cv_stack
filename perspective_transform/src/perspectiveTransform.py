@@ -2,14 +2,12 @@
 # license removed for brevity
 # from tkinter import Image
 import rospy
-from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from math import radians, cos
 import numpy as np
 
 import cv2
-
 
 
 def getBirdView(image, camera_properties):#TODO could be sped up by only doing math once
@@ -116,9 +114,6 @@ def callback_left(data):
     timestamp = data.header.stamp
     cv_image = bridge.imgmsg_to_cv2(data, desired_encoding='bgra8')
     transformed_image = getBirdView(cv_image, ZED)
-    # cv2.imshow("raw", cv_image)
-    # cv2.imshow("transformed", transformed_image)
-    # cv2.waitKey(1)
     publish_transform(bridge, "/cv/perspective/left", transformed_image, timestamp)
 
 
@@ -128,13 +123,10 @@ def callback_right(data):
     timestamp = data.header.stamp
     cv_image = bridge.imgmsg_to_cv2(data, desired_encoding='bgra8')
     transformed_image = getBirdView(cv_image, ZED)
-    # cv2.imshow("raw", cv_image)
-    # cv2.imshow("transformed", transformed_image)
-    # cv2.waitKey(1)
     publish_transform(bridge, "/cv/perspective/right", transformed_image, timestamp)
 
 def publish_transform(bridge, topic, cv2_img, timestamp):
-    transformed_ros = bridge.cv2_to_imgmsg(cv2_img)
+    transformed_ros = bridge.cv2_to_imgmsg(cv2_img, encoding='bgra8')
     transformed_ros.header.stamp = timestamp
     pub = rospy.Publisher(topic, Image, queue_size=10)
     pub.publish(transformed_ros)
@@ -147,11 +139,19 @@ def listener():
     # anonymous=True flag means that rospy will choose a unique
     # name for our 'listener' node so that multiple listeners can
     # run simultaneously.
-    rospy.init_node('listener', anonymous=True)
+    rospy.init_node('perspective_transform')
 
-    rospy.Subscriber("/zed_node/left/image_rect_color", Image, callback_left)
-    rospy.Subscriber("/zed_node/right/image_rect_color", Image, callback_right)
+    global LEFT_TOPIC, RIGHT_TOPIC
+    LEFT_TOPIC = "/zed/zed_node/left/image_rect_color"
+    RIGHT_TOPIC = "/zed/zed_node/right/image_rect_color"
+    rospy.loginfo("Perspective Transform Initialized. Listening to the following messages: ")
+    rospy.loginfo(LEFT_TOPIC)
+    rospy.loginfo(RIGHT_TOPIC)
 
+    rospy.Subscriber(LEFT_TOPIC, Image, callback_left)
+    
+    rospy.Subscriber(RIGHT_TOPIC, Image, callback_right)
+    
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
 
@@ -159,13 +159,12 @@ def listener():
 def init():
 	# iniailize
     global ZED
-    ZED = CameraProperties(43.18, 96.0, 54.0, 90.0)#TODO get accurate first parameter, which is height
+    ZED = CameraProperties(43.18, 96.0, 54.0, 90.0) #TODO get accurate first parameter, which is height
 
 
 if __name__ == '__main__':
     init()
     try:
         listener()
-        publish_homography()
     except rospy.ROSInterruptException:
         pass
