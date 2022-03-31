@@ -6,6 +6,8 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 from math import radians, cos
 import numpy as np
+from rospy.numpy_msg import numpy_msg
+from rospy_tutorials.msg import Floats
 
 import cv2
 
@@ -20,6 +22,7 @@ def getBirdView(image, camera_properties):#TODO could be sped up by only doing m
 
     src_quad = camera_properties.src_quad(rows, columns)
     dst_quad = camera_properties.dst_quad(rows, columns, min_angle, max_angle)
+    
     return perspective(image, src_quad, dst_quad)
 
 
@@ -109,16 +112,18 @@ class CameraProperties(object):
 
 
 def callback_left(data):
-    rospy.loginfo("Converting zed left to perspective transform")
+    # rospy.loginfo("Converting zed left to perspective transform")
     bridge = CvBridge()
     timestamp = data.header.stamp
     cv_image = bridge.imgmsg_to_cv2(data, desired_encoding='bgra8')
     transformed_image = getBirdView(cv_image, ZED)
     publish_transform(bridge, "/cv/perspective/left", transformed_image, timestamp)
+    # publish_dst("/cv/perspective/dst_quad", ZED.bird_dst_quad, timestamp)
+    publish_transform(bridge, "/cv/perspective/dst_quad", ZED.bird_dst_quad, timestamp)
 
 
 def callback_right(data):
-    rospy.loginfo("Converting zed right to perspective transform")
+    # rospy.loginfo("Converting zed right to perspective transform")
     bridge = CvBridge()
     timestamp = data.header.stamp
     cv_image = bridge.imgmsg_to_cv2(data, desired_encoding='bgra8')
@@ -131,7 +136,13 @@ def publish_transform(bridge, topic, cv2_img, timestamp):
     pub = rospy.Publisher(topic, Image, queue_size=10)
     pub.publish(transformed_ros)
     rospy.loginfo("Published")
-    
+
+def publish_dst(topic, vertices, timestamp):
+    pub = rospy.Publisher(topic, numpy_msg(Floats), queue_size=10)
+    vertices.header.stamp = timestamp
+    pub.publish(vertices)
+    rospy.loginfo("Published dst_quad")
+
     
 def listener():
     # In ROS, nodes are uniquely named. If two nodes with the same

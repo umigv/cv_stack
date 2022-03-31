@@ -9,6 +9,9 @@ import cv2
 import math
 import sys
 from cv_bridge import CvBridge
+from rospy.numpy_msg import numpy_msg
+from rospy_tutorials.msg import Floats
+import message_filters
 
 
 class ADSDetection:
@@ -19,7 +22,7 @@ class ADSDetection:
     def returnHougedImage(self):
         return houged
 
-    def __init__(self, image):
+    def __init__(self, image, dst_points):
 
         # grayscale the image
         grayscaled = self.grayscale(image)
@@ -57,7 +60,14 @@ class ADSDetection:
         global houged
         houged = self.hough_lines(edgeDetectedImage, rho, theta,
                         threshold, min_line_len, max_line_gap)
-
+        # bottomLeft, bottomRight, topLeft, topRight = dst_quad
+        bottomLeft, bottomRight, topLeft, topRight = dst_points
+        bottomLeft = [bottomLeft[0]+1, bottomLeft[1]+1]
+        bottomRight = [bottomRight[0]-1, bottomRight[1]+1]
+        topLeft = [topLeft[0]+1, topLeft[1]-1]
+        topRight = [topRight[0]-1, topRight[1]-1]
+        dst_points = [bottomLeft, bottomRight, topLeft, topRight]
+        region_of_interest(houged, dst_points)
         # cv2.imshow("houged", houged)
         # cv2.waitKey(0)
 
@@ -124,13 +134,13 @@ class ADSDetection:
             for x1,y1,x2,y2 in line:
                 cv2.line(img, (x1, y1), (x2, y2), color, thickness)
 
-def callback(data):
+def callback(data, dst):
     rospy.loginfo("Converting perspective transformed img to edge detection image")
     bridge = CvBridge()
     timestamp = data.header.stamp
     cv_image = bridge.imgmsg_to_cv2(data, desired_encoding='bgra8')
     # import pdb; pdb.set_trace()
-    ads = ADSDetection(cv_image)
+    ads = ADSDetection(cv_image, dst)
     publish_transform(bridge, "/cv/laneMapping/left", ads.returnHougedImage(), timestamp)
 
 def publish_transform(bridge, topic, cv2_img, timestamp):
@@ -149,7 +159,11 @@ def listener():
     rospy.init_node('ads_detection', anonymous=True)
     rospy.loginfo("Initialized ADS Detection")
 
-    rospy.Subscriber("/cv/perspective/left", Image, callback)
+    image_sub = message_filters.Subscriber("/cv/perspective/left", Image)
+    dst_sub = message_filters.Subscriber("/cv/perspective/dst_quad", Image)
+    
+    ts = message_filters.TimeSynchronizer([image_sub, dst_sub], 10)
+    ts.registerCallback(callback)
 
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
