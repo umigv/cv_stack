@@ -8,12 +8,19 @@ from math import radians, cos
 import numpy as np
 from rospy.numpy_msg import numpy_msg
 from rospy_tutorials.msg import Floats
+import ros_numpy
 
 import cv2
 
 
 def getBirdView(image, camera_properties):#TODO could be sped up by only doing math once
     rows, columns = image.shape[:2]
+    #rospy.loginfo(rows) #376 for non svo   720 for svo
+    #rospy.loginfo(columns) #672 for non svo    1280 for svo
+    if columns == 1280:
+        columns = 1344
+    if rows == 720:
+        rows = 752
     min_angle = 0.0
     max_angle = camera_properties.compute_max_angle()
     min_index = camera_properties.compute_min_index(rows, max_angle)
@@ -119,9 +126,11 @@ def callback_left(data):
     transformed_image = getBirdView(cv_image, ZED)
     publish_transform(bridge, "/cv/perspective/left", transformed_image, timestamp)
     # publish_dst("/cv/perspective/dst_quad", ZED.bird_dst_quad, timestamp)
-    publish_transform(bridge, "/cv/perspective/dst_quad", ZED.bird_dst_quad, timestamp)
+    # rospy.loginfo(ZED.bird_dst_quad)
+    msg = ros_numpy.msgify(Image, ZED.bird_dst_quad, encoding='32FC1')
+    publish_dst("/cv/perspective/dst_quad", msg, timestamp)
 
-
+'''
 def callback_right(data):
     # rospy.loginfo("Converting zed right to perspective transform")
     bridge = CvBridge()
@@ -129,17 +138,18 @@ def callback_right(data):
     cv_image = bridge.imgmsg_to_cv2(data, desired_encoding='bgra8')
     transformed_image = getBirdView(cv_image, ZED)
     publish_transform(bridge, "/cv/perspective/right", transformed_image, timestamp)
+'''
 
 def publish_transform(bridge, topic, cv2_img, timestamp):
     transformed_ros = bridge.cv2_to_imgmsg(cv2_img, encoding='bgra8')
     transformed_ros.header.stamp = timestamp
     pub = rospy.Publisher(topic, Image, queue_size=10)
     pub.publish(transformed_ros)
-    rospy.loginfo("Published")
+    rospy.loginfo("Published transform")
 
 def publish_dst(topic, vertices, timestamp):
-    pub = rospy.Publisher(topic, numpy_msg(Floats), queue_size=10)
     vertices.header.stamp = timestamp
+    pub = rospy.Publisher(topic, Image, queue_size=10)
     pub.publish(vertices)
     rospy.loginfo("Published dst_quad")
 
@@ -152,17 +162,21 @@ def listener():
     # run simultaneously.
     rospy.init_node('perspective_transform')
 
-    global LEFT_TOPIC, RIGHT_TOPIC
-    LEFT_TOPIC = "/zed/zed_node/left/image_rect_color"
-    RIGHT_TOPIC = "/zed/zed_node/right/image_rect_color"
+    global LEFT_TOPIC#, RIGHT_TOPIC
+    LEFT_TOPIC = "/zed/zed_node/left/image_rect_gray"
+    '''
+    RIGHT_TOPIC = "/zed/zed_node/right/image_rect_gray"
+    '''
     rospy.loginfo("Perspective Transform Initialized. Listening to the following messages: ")
     rospy.loginfo(LEFT_TOPIC)
+    '''
     rospy.loginfo(RIGHT_TOPIC)
+    '''
 
-    rospy.Subscriber(LEFT_TOPIC, Image, callback_left)
-    
+    rospy.Subscriber(LEFT_TOPIC, Image, callback_left, queue_size = 1, buff_size=2**24)
+    '''
     rospy.Subscriber(RIGHT_TOPIC, Image, callback_right)
-    
+    '''
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
 
