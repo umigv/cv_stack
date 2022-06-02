@@ -10,7 +10,6 @@ import math
 import sys
 from cv_bridge import CvBridge
 from rospy.numpy_msg import numpy_msg
-from rospy_tutorials.msg import Floats
 import message_filters
 import ros_numpy
 from nav_msgs.msg import OccupancyGrid
@@ -18,7 +17,8 @@ from nav_msgs.msg import MapMetaData
 from geometry_msgs.msg import Pose
 
 
-# Andrew and David (and Sid)
+# Rajiv Andrew and David
+
 
 class ADSDetection:
 
@@ -54,9 +54,9 @@ class ADSDetection:
             circles = np.uint16(np.around(circles))
             for i in circles[0,:]:
                 # draw the outer circle
-                cv2.circle(threshold,(i[0],i[1]),i[2],(0,255,0),2)
+                cv2.circle(threshold,(i[0],i[1]),i[2],(255,255,255),2)
                 # draw the center of the circle
-                cv2.circle(threshold,(i[0],i[1]),2,(0,0,255),3)
+                #cv2.circle(threshold,(i[0],i[1]),2,(0,0,255),3)
         return None
         
     
@@ -84,12 +84,10 @@ class ADSDetection:
         return thresholded
 
     def __init__(self, image, dst_points):
-        # grayscale the image
-        grayscaled = self.grayscale(image)
 
         # apply gaussian blur
         kernelSize = 5
-        gaussianBlur = self.gaussian_blur(grayscaled, kernelSize)
+        gaussianBlur = self.gaussian_blur(image, kernelSize)
 
         # canny
         minThreshold = 20
@@ -107,10 +105,11 @@ class ADSDetection:
         # masked_image = region_of_interest(edgeDetectedImage, pts)
 
 
-        #hough lines
+        # hough lines
         rho = 1
         theta = np.pi/180
-        threshold = 30
+        # originally 30
+        threshold = 40
         min_line_len = 1
         max_line_gap = 20
         global houged
@@ -133,8 +132,11 @@ class ADSDetection:
         cv2.fillPoly(thresholded, np.int32([leftArea]), color=(100, 100, 100))
         cv2.fillPoly(thresholded, np.int32([rightArea]), color=(100, 100, 100))
         
+        # if we have a way to automatically set the unknown areas based on the 
+        # dst_points in convertToOccupancy, rather than filling in the cv2 image
+        # with fillPoly then we can kind of skip two steps
 
-        # self.convertToOccupancy(thresholded)
+        self.convertToOccupancy(thresholded, dst_points)
         #grid should be final occupancy grid
 
         
@@ -188,7 +190,7 @@ class ADSDetection:
         # import pdb; pdb.set_trace()
         line_img = np.zeros((img.shape[0], img.shape[1], 3), dtype=np.uint8)
         # rospy.loginfo(type(lines))
-        # rospy.loginfo(lines)
+        rospy.loginfo(lines)
         if isinstance(lines, np.ndarray):
             # rospy.loginfo(lines)
             self.draw_lines(line_img, lines)
@@ -199,11 +201,25 @@ class ADSDetection:
         """
         This function draws `lines` with `color` and `thickness`.
         """
-        for line in lines:
-            for x1,y1,x2,y2 in line:
-                cv2.line(img, (x1, y1), (x2, y2), color, thickness)
+        lines = np.squeeze(lines)
+        distances = np.linalg.norm(lines[:, 0:2] - lines[:, 2:], axis=1, keepdims=True)
+        MAX_COLOR = 255
+        MIN_COLOR = 0
+        m = (MAX_COLOR - MIN_COLOR)/(np.max(distances) - np.min(distances)) # Resize distances between MIN and MAX COLOR
+        color_range = m * distances
+        THRESHOLD = 50 # Get rid of lines smaller than threshold
 
-    def convertToOccupancy(self, img):
+        # cv2.line is slow because of the for loop, but can be used to show various colors.
+        # This can help if we want a continous probability of lines based on distance
+        # color_range[color_range < THRESHOLD] = 0
+        # for ((x1,y1,x2,y2), col) in zip(lines, color_range):
+        #     cv2.line(img, (x1, y1), (x2, y2), col, thickness)
+
+        # cv2.polylines is faster but can draw only one color. Thus, the only type of filtering is binary with the threshold
+        filtered_lines = lines[(color_range > THRESHOLD).ravel(), :]
+        cv2.polylines(img, filtered_lines.reshape((-1, 2, 2)), False, 255, thickness) # Faster but can't draw multiple colors. Thus, no thresholding
+
+    def convertToOccupancy(self, img, dst_points):
         # function to take in the final lane detected image and convert into an occupancy grid
         height, width = img.shape[:2]
         resolution = 0.05 
@@ -217,25 +233,19 @@ class ADSDetection:
         m.origin = Pose()
         m.origin.position.x, m.origin.position.y = pos[:2]
         grid.info = m
-        grid.data = self.convertImgToOgrid(img)
+        grid.data = self.convertImgToOgrid(img, height, width, dst_points)
         
 
-    def convertImgToOgrid(self, img):
+    def convertImgToOgrid(self, img, height, width, dst_points):
         #function to take a cv2 image and return an int8[] array
-        info = []
-        for col in img:
-            for row in col:
-                val = np.uint8(row)
-                if val[0] == 0:
-                    info.append(0)
-                elif val[0] == 100:
-                    info.append(-1)
-                elif val[0] == 255:
-                    info.append(100)
-                # rospy.loginfo(val[0])
-        
-        return info
-        
+
+        # dst_points = [bottomRight, bottomLeft, topLeft, topRight]
+        img = img[:, :, 0].astype(np.int16)
+        img[img == 100] = -1
+        img[img > 0] = 100
+
+        return img.ravel().tolist() # for ros msg
+
 
 def callback(data, dst):
     #rospy.loginfo("Converting perspective transformed img to edge detection image")
