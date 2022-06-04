@@ -3,6 +3,7 @@
 # import matplotlib.pyplot as plt
 # import matplotlib.image as mpimg
 import rospy
+import sys
 from sensor_msgs.msg import Image
 import numpy as np
 import cv2
@@ -126,8 +127,9 @@ class ADSDetection:
         houged = self.region_of_interest(houged, np.asarray(dst_points))
         leftArea = np.array([[0,0], topLeft, bottomLeft, [0,houged.shape[0]]])
         rightArea = np.array([topRight, [houged.shape[1],0], [houged.shape[1],houged.shape[0]], bottomRight])
-        global thresholded
-        self.potholes(edgeDetectedImage, houged)
+        global thresholded, POTHOLES_ENABLED
+        if POTHOLES_ENABLED:
+            self.potholes(edgeDetectedImage, houged)
         thresholded = self.threshold(image, houged)
         cv2.fillPoly(thresholded, np.int32([leftArea]), color=(100, 100, 100))
         cv2.fillPoly(thresholded, np.int32([rightArea]), color=(100, 100, 100))
@@ -190,7 +192,7 @@ class ADSDetection:
         # import pdb; pdb.set_trace()
         line_img = np.zeros((img.shape[0], img.shape[1], 3), dtype=np.uint8)
         # rospy.loginfo(type(lines))
-        rospy.loginfo(lines)
+        # rospy.loginfo(lines)
         if isinstance(lines, np.ndarray):
             # rospy.loginfo(lines)
             self.draw_lines(line_img, lines)
@@ -203,7 +205,7 @@ class ADSDetection:
         """
         lines = np.squeeze(lines)
         distances = np.linalg.norm(lines[:, 0:2] - lines[:, 2:], axis=1, keepdims=True)
-        MAX_COLOR = 255
+        MAX_COLOR = 99
         MIN_COLOR = 0
         m = (MAX_COLOR - MIN_COLOR)/(np.max(distances) - np.min(distances)) # Resize distances between MIN and MAX COLOR
         color_range = m * distances
@@ -211,13 +213,13 @@ class ADSDetection:
 
         # cv2.line is slow because of the for loop, but can be used to show various colors.
         # This can help if we want a continous probability of lines based on distance
-        # color_range[color_range < THRESHOLD] = 0
-        # for ((x1,y1,x2,y2), col) in zip(lines, color_range):
-        #     cv2.line(img, (x1, y1), (x2, y2), col, thickness)
+        color_range[color_range < THRESHOLD] = 0
+        for ((x1,y1,x2,y2), col) in zip(lines, color_range):
+            cv2.line(img, (x1, y1), (x2, y2), col, thickness)
 
         # cv2.polylines is faster but can draw only one color. Thus, the only type of filtering is binary with the threshold
-        filtered_lines = lines[(color_range > THRESHOLD).ravel(), :]
-        cv2.polylines(img, filtered_lines.reshape((-1, 2, 2)), False, 255, thickness) # Faster but can't draw multiple colors. Thus, no thresholding
+        # filtered_lines = lines[(color_range > THRESHOLD).ravel(), :]
+        # cv2.polylines(img, filtered_lines.reshape((-1, 2, 2)), False, 255, thickness) # Faster but can't draw multiple colors. Thus, no thresholding
 
     def convertToOccupancy(self, img, dst_points):
         # function to take in the final lane detected image and convert into an occupancy grid
@@ -242,9 +244,9 @@ class ADSDetection:
         # dst_points = [bottomRight, bottomLeft, topLeft, topRight]
         img = img[:, :, 0].astype(np.int16)
         img[img == 100] = -1
-        img[img > 0] = 100
+        # img[img > 0] = 100
 
-        return img.ravel().tolist() # for ros msg
+        return img.astype(np.int8).ravel().tolist() # for ros msg
 
 
 def callback(data, dst):
@@ -279,7 +281,9 @@ def listener():
     # name for our 'listener' node so that multiple listeners can
     # run simultaneously.
     rospy.init_node('ads_detection', anonymous=True)
-    rospy.loginfo("Initialized ADS Detection")
+    global POTHOLES_ENABLED
+    msg = "Initialized ADS Detection: " + "No potholes" if not POTHOLES_ENABLED else "Potholes Enabled"
+    rospy.loginfo(msg)
 
     image_sub = message_filters.Subscriber("/cv/perspective/left", Image, queue_size = 1, buff_size=2**24)
     # image_sub = message_filters.Subscriber("/zed/zed_node/left/image_rect_color", Image)
@@ -294,6 +298,12 @@ def listener():
 
 if __name__ == '__main__':
     try:
+        argv = rospy.myargv(argv=sys.argv)
+        global POTHOLES_ENABLED
+        if (len(argv) == 2):
+            POTHOLES_ENABLED = False
+        else:
+            POTHOLES_ENABLED = True
         listener()
     except rospy.ROSInterruptException:
         pass

@@ -7,45 +7,52 @@ from cv_bridge import CvBridge
 from math import radians, cos
 import numpy as np
 from rospy.numpy_msg import numpy_msg
-from rospy_tutorials.msg import Floats
+# from rospy_tutorials.msg import Floats
 import ros_numpy
 
 import cv2
 
 
-def getBirdView(image, camera_properties):#TODO could be sped up by only doing math once
-    rows, columns = image.shape[:2]
-    #rospy.loginfo(rows) #376 for non svo   720 for svo
-    #rospy.loginfo(columns) #672 for non svo    1280 for svo
-    if columns == 1280:
-        columns = 1344
-    if rows == 720:
-        rows = 752
-    min_angle = 0.0
-    max_angle = camera_properties.compute_max_angle()
-    min_index = camera_properties.compute_min_index(rows, max_angle)
-    image = image[min_index:, :]
-    rows = image.shape[0]
+def getBirdView(image, cp):#TODO could be sped up by only doing math once
+    if (cp.matrix is None):
+        rows, columns = image.shape[:2]
+        #rospy.loginfo(rows) #376 for non svo   720 for svo
+        #rospy.loginfo(columns) #672 for non svo    1280 for svo
+        if columns == 1280:
+            columns = 1344
+        if rows == 720:
+            rows = 752
+        min_angle = 0.0
+        max_angle = cp.compute_max_angle()
+        min_index = cp.compute_min_index(rows, max_angle)
+        image = image[min_index:, :]
+        rows = image.shape[0]
 
-    src_quad = camera_properties.src_quad(rows, columns)
-    dst_quad = camera_properties.dst_quad(rows, columns, min_angle, max_angle)
-    
-    return perspective(image, src_quad, dst_quad)
+        src_quad = cp.src_quad(rows, columns)
+        dst_quad = cp.dst_quad(rows, columns, min_angle, max_angle)
+        return perspective(image, src_quad, dst_quad, cp)
+    else:
+        image = image[cp.minIndex:, :]
+        return cv2.warpPerspective(image, cp.matrix, (cp.maxWidth, cp.maxHeight))
 
 
-def perspective(image, src_quad, dst_quad):
+
+def perspective(image, src_quad, dst_quad, cp):
     bottomLeft, bottomRight, topLeft, topRight = dst_quad
     # solve for the new width
     widthA = topRight[0] - topLeft[0]
     widthB = bottomRight[0] - bottomLeft[0]
-    maxWidth = max(widthA, widthB)
+    maxWidth1 = max(widthA, widthB)
     # solve for the new height
     heightA = bottomLeft[1] - topLeft[1]
     heightB = bottomRight[1] - topRight[1]
-    maxHeight = max(heightA, heightB)
+    maxHeight1 = max(heightA, heightB)
 
-    matrix = cv2.getPerspectiveTransform(src_quad, dst_quad)
-    return cv2.warpPerspective(image, matrix, (maxWidth, maxHeight))
+    matrix1 = cv2.getPerspectiveTransform(src_quad, dst_quad)
+    cp.matrix = matrix1
+    cp.maxWidth = maxWidth1
+    cp.maxHeight = maxHeight1
+    return cv2.warpPerspective(image, matrix1, (maxWidth1, maxHeight1))
 
 
 def rotate(image, angle, scale = 1.0):
@@ -81,6 +88,10 @@ class CameraProperties(object):
         self.cameraTilt = radians(float(cameraTilt))
         self.bird_src_quad = None
         self.bird_dst_quad = None
+        self.matrix = None
+        self.maxHeight = None
+        self.maxWidth = None
+        self.minIndex = None
 
     def src_quad(self, rows, columns):
         '''This just finds the vertices of a rectangle that covers the entire standard image'''
@@ -109,10 +120,14 @@ class CameraProperties(object):
     def reset(self):
         self.bird_src_quad = None
         self.bird_dst_quad = None
+        self.matrix = None
+        self.maxHeight = None
+        self.maxWidth = None
+        self.minIndex = None
 
     def compute_min_index(self, rows, max_angle):
-        return int(rows*(1.0 - max_angle/self.fov_vert))
-
+        self.minIndex = int(rows*(1.0 - max_angle/self.fov_vert))
+        return self.minIndex
     def compute_max_angle(self):
         return min(CameraProperties.functional_limit - self.cameraTilt + self.fov_vert/2.0, self.fov_vert)
 
@@ -143,13 +158,13 @@ def callback_right(data):
 def publish_transform(bridge, topic, cv2_img, timestamp):
     transformed_ros = bridge.cv2_to_imgmsg(cv2_img, encoding='bgra8')
     transformed_ros.header.stamp = timestamp
-    pub = rospy.Publisher(topic, Image, queue_size=10)
+    pub = rospy.Publisher(topic, Image, queue_size=1)
     pub.publish(transformed_ros)
     rospy.loginfo("Published transform")
 
 def publish_dst(topic, vertices, timestamp):
     vertices.header.stamp = timestamp
-    pub = rospy.Publisher(topic, Image, queue_size=10)
+    pub = rospy.Publisher(topic, Image, queue_size=1)
     pub.publish(vertices)
     rospy.loginfo("Published dst_quad")
 
