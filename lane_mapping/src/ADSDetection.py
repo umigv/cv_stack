@@ -301,9 +301,9 @@ if __name__ == '__main__':
         argv = rospy.myargv(argv=sys.argv)
         global POTHOLES_ENABLED
         if (len(argv) == 2):
-            POTHOLES_ENABLED = False
-        else:
             POTHOLES_ENABLED = True
+        else:
+            POTHOLES_ENABLED = False
         listener()
     except rospy.ROSInterruptException:
         pass
