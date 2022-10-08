@@ -1,16 +1,20 @@
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+#!/usr/bin/env python
+# import matplotlib.pyplot as plt
+# import matplotlib.image as mpimg
+# from tkinter.tix import IMAGE
 import cv2
-# reading in an image
-image = cv2.imread('../LaneImage.jpg')
-# printing out some stats and plotting the image
-print('This image is:', type(image), 'with dimensions:', image.shape)
-plt.imshow(image)
-plt.show()
-
-
 import numpy as np
-import cv2def region_of_interest(img, vertices):
+
+def main():
+    # reading in an image
+    image = cv2.imread('../LaneImage.jpg')
+    print (type(image))
+    # printing out some stats and plotting the image
+    print('This image is:', type(image), 'with dimensions:', image.shape)
+    cv2.imshow("Name", image)
+    cv2.waitKey(8000)
+
+    def region_of_interest(img, vertices):
     # Define a blank matrix that matches the image height/width.
     mask = np.zeros_like(img)    # Retrieve the number of color channels of the image.
     channel_count = img.shape[2]    # Create a match color with the same color channel counts.
@@ -22,3 +26,6 @@ import cv2def region_of_interest(img, vertices):
     # Returning the image only where mask pixels match
     masked_image = cv2.bitwise_and(img, mask)
     return masked_image
+    
+if __name__== '__main__':
+    main()
