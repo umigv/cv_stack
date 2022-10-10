@@ -52,8 +52,6 @@ def draw_lines(img, lines, color = [255, 0, 0], thickness = 3):
 def main():
     # Reads the unedited image
     image = cv2.imread('LaneImage.jpg')
-    # Prints details and shows the unedited image
-    print('This image is: ', type(image), ' with dimensions: ', image.shape)
     
     cv2.imshow('window',image)
      
@@ -110,9 +108,15 @@ def main():
                 left_line_x.extend([x1, x2])
                 left_line_y.extend([y1, y2])
             # Otherwise it is in the right group
-            else:
+            else: 
                 right_line_x.extend([x1, x2])
                 right_line_y.extend([y1, y2])
+
+    print(left_line_y)
+    print(left_line_x)
+    print(right_line_y)
+    print(right_line_x)
+
 
     # Just below the horizon
     min_y = int(image.shape[0] * (3 / 5))
@@ -120,36 +124,36 @@ def main():
     max_y = int(image.shape[0])
 
     # Generates a linear function for the left lanes
-    poly_left = np.poly1d(np.polyfit(
-            left_line_y, 
-            left_line_x, 
-            deg=1
-    ))
-    left_x_start = int(poly_left(max_y))
-    left_x_end = int(poly_left(min_y))
+    #poly_left = np.poly1d(np.polyfit(
+    #        left_line_y, 
+    #        left_line_x, 
+    #        deg = 1
+    #))
+    #left_x_start = int(poly_left(max_y))
+    #left_x_end = int(poly_left(min_y))
 
     # Generates a linear function for the right lanes
-    poly_right = np.poly1d(np.polyfit(
-            right_line_y, 
-            right_line_x, 
-            deg=1
-    ))
-    right_x_start = int(poly_left(max_y))
-    right_x_end = int(poly_left(min_y))
+    #poly_right = np.poly1d(np.polyfit(
+    #        right_line_y, 
+    #        right_line_x, 
+    #        deg = 1
+    #))
+    #right_x_start = int(poly_left(max_y))
+    #right_x_end = int(poly_left(min_y))
 
 
     # Calls draw_lines function
-    line_image = draw_lines(
-            image,
-            [[
-                [left_x_start, max_y, left_x_end, min_y],
-                [right_x_start, max_y, right_x_end, min_y]
-            ]],
-            thickness = 5
-    )
+    #line_image = draw_lines(
+    #        image,
+    #        [[
+    #            [left_x_start, max_y, left_x_end, min_y],
+    #            [right_x_start, max_y, right_x_end, min_y]
+    #        ]],
+    #        thickness = 5
+    #)
 
-    plt.figure()
-    cv2.imshow('window_2',line_image)
+    #plt.figure()
+    #cv2.imshow('window_2',line_image)
 
 # Main function will run if someone calls main
 if __name__ == '__main__':
