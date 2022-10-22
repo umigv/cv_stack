@@ -24,7 +24,7 @@ def listener():
     rospy.init_node('visualizer', anonymous=True)
     rospy.loginfo("Visualizing Topic: ")
     rospy.loginfo(TOPIC_TO_VISUALIZE)
-    rospy.Subscriber(TOPIC_TO_VISUALIZE, CompressedImage, callback)
+    rospy.Subscriber(TOPIC_TO_VISUALIZE, CompressedImage, callback, queue_size = 1, buff_size=2**24)
 
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()

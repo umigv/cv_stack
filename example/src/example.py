@@ -42,7 +42,7 @@ def findLines(image):
         return img
 
 
-    
+
     region_of_interest_vertices = [
         (0, image.shape[0]),
         (image.shape[1] / 2, image.shape[0] / 2),

@@ -1,5 +1,5 @@
 <launch>
-    <include file="$(find zed_wrapper)/launch/zed.launch"/>
+    <!-- <include file="$(find zed_wrapper)/launch/zed.launch"/> -->
     <node
         pkg="perspective_transform"
         type="perspectiveTransform.py"
@@ -11,10 +11,10 @@
             type="ADSDetection.py" 
             name="lane_mapping" 
             respawn="true"
-            args="no_potholes"
+            args=""
             output="screen"
              />
-        <!-- <node --> 
+        <!-- <node  -->
             <!-- pkg="layer_maps" --> 
             <!-- name="layer_maps" --> 
             <!-- type="layerMaps.py" --> 
