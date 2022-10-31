@@ -1,3 +1,4 @@
+from tokenize import Double
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
@@ -115,38 +116,8 @@ def main():
             right_line_x.extend([x1, x2])
             right_line_y.extend([y1, y2])
 
-    # Just below the horizon
-    min_y = int(image.shape[0] * (3 / 5))
-    # Bottom of image
-    max_y = int(image.shape[0])
-
-    # Generates a linear function for the left lanes
-    poly_left = np.poly1d(np.polyfit(
-            left_line_y, 
-            left_line_x, 
-            deg = 1
-    ))
-    left_x_start = int(poly_left(max_y))
-    left_x_end = int(poly_left(min_y))
-
-    # Generates a linear function for the right lanes
-    poly_right = np.poly1d(np.polyfit(
-            right_line_y, 
-            right_line_x, 
-            deg = 1
-    ))
-    right_x_start = int(poly_right(max_y))
-    right_x_end = int(poly_right(min_y))
-
     # Calls draw_lines function
-    line_image = draw_lines(
-            image,
-            [[
-                [left_x_start, max_y, left_x_end, min_y],
-                [right_x_start, max_y, right_x_end, min_y]
-            ]],
-            thickness = 5
-    )
+    line_image = draw_lines(image, lines)
 
     plt.figure()
     cv2.imshow('lane_image',line_image)
