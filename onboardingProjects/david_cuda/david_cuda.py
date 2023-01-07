@@ -78,9 +78,7 @@ def show(img):
 
 def gaussian_blur(img, kernel_size):
     """Applies a Gaussian Noise kernel"""
-
     f = cv2.cuda.createGaussianFilter(cv2.CV_8UC1, cv2.CV_8UC1, (kernel_size, kernel_size), 0)
-    
     f.apply(img, img)
     return img
 

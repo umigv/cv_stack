@@ -90,48 +90,36 @@ class ADSDetection:
         return thresholded
 
     def __init__(self, image):
+        image = self.grayscale(image)
+        gpu_frame = cv2.cuda_GpuMat()
+        gpu_frame.upload(image)
 
         # apply gaussian blur
-        global gaussianBlur
-         # apply gaussian blur
         kernelSize = 5
-        gaussianBlur = self.gaussian_blur(image, kernelSize)
-        gaussianBlur = self.gaussian_blur(gaussianBlur, kernelSize)
-        # gaussianBlur = self.gaussian_blur(gaussianBlur, kernelSize)
-        # gaussianBlur = self.gaussian_blur(gaussianBlur, kernelSize)
-        # global thresholded
-        # thresholded = self.threshold(gaussianBlur, gaussianBlur)
-
-        gaussianBlur = cv2.convertScaleAbs(gaussianBlur, alpha=1, beta=0)
-        global thresholded
-        thresholded = self.threshold(gaussianBlur, gaussianBlur)
-        
-        # canny
-        minThreshold = 100
-        maxThreshold = 130
-        global edgeDetectedImage
-        edgeDetectedImage = thresholded
-        # edgeDetectedImage = cv2.Canny(thresholded, minThreshold, maxThreshold)
+        gaussianBlur = self.gaussian_blur(gpu_frame, kernelSize)
         return
+        # canny
+        minThreshold = 200
+        maxThreshold = 250
+        global edgeDetectedImage
+        edgeDetectedImage = self.cannyEdgeDetection(gaussianBlur, minThreshold, maxThreshold)
+        # hough lines
         rho = 1
         theta = np.pi/180
         # originally 30
-        hough_threshold = 80
+        hough_threshold = 40
         min_line_len = 1
         max_line_gap = 20
         global houged
         houged = self.hough_lines(edgeDetectedImage, rho, theta,
                         hough_threshold, min_line_len, max_line_gap)
         # houged = region_of_interest(houged, np.asarray(dst_points))
-    
-        global POTHOLES_ENABLED
-        if POTHOLES_ENABLED:
-            self.potholes(edgeDetectedImage, houged)
+        global thresholded
+        thresholded = threshold(image, houged)
 
-        # self.convertToOccupancy(thresholded)
-        # thresholded should be final occupancy grid
-
-        
+    def cannyEdgeDetection(self, img, minThreshold, maxThreshold):
+        detector = cv2.cuda.createCannyEdgeDetector(minThreshold, maxThreshold)
+        return detector.detect(img)
 
     def grayscale(self,img):
         """Applies the Grayscale transform
@@ -140,10 +128,11 @@ class ADSDetection:
         you should call plt.imshow(gray, cmap='gray')"""
         return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    def gaussian_blur(self,img, kernel_size):
+    def gaussian_blur(self, gpu_frame, kernel_size):
         """Applies a Gaussian Noise kernel"""
-        return cv2.GaussianBlur(img, (kernel_size, kernel_size), 0)
-
+        f = cv2.cuda.createGaussianFilter(gpu_frame.type(), gpu_frame.type(), (kernel_size, kernel_size), 0)
+        f.apply(gpu_frame, gpu_frame)
+        return gpu_frame
 
     def region_of_interest(self,img, vertices):
         """
@@ -247,7 +236,7 @@ def callback(data):
     cv_image = bridge.imgmsg_to_cv2(data, desired_encoding='bgra8')
     ads = ADSDetection(cv_image)
     # publish_transform(bridge, "/cv/laneMapping/left", ads.returnCroppedImage(), timestamp)
-    publish_transform(bridge, "/cv/laneMapping/left", ads.returnEDImage(), timestamp)
+    publish_transform(bridge, "/cv/laneMapping/left", ads.returnGaussianBlur(), timestamp)
     # publish_ogrid("/cv/laneMapping/ogrid", grid, timestamp)
 
 def publish_transform(bridge, topic, cv2_img, timestamp):
@@ -276,7 +265,7 @@ def listener():
     rospy.loginfo(msg)
 
     # image_sub = message_filters.Subscriber("/cv/perspective/left", Image, queue_size = 1, buff_size=2**24)
-    image_sub = message_filters.Subscriber("/zed/zed_node/left/image_rect_color", Image, queue_size = 1, buff_size=2**24)
+    image_sub = message_filters.Subscriber("/zed/zed_node/left/image_rect_gray", Image, queue_size = 1, buff_size=2**24)
     # dst_sub = message_filters.Subscriber("/cv/perspective/dst_quad", Image, queue_size = 1, buff_size=2**24)
 
     ts = message_filters.TimeSynchronizer([image_sub], 10)
