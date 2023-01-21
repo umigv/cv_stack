@@ -8,6 +8,7 @@ import sys
 from sensor_msgs.msg import Image
 import numpy as np
 import cv2
+# import cupy as cp
 import math
 import sys
 from cv_bridge import CvBridge
@@ -60,53 +61,98 @@ class ADSDetection:
                 # draw the center of the circle
                 #cv2.circle(threshold,(i[0],i[1]),2,(0,0,255),3)
         return None
-        
-    
-    def threshold(self, img, edges):
-        hls = cv2.cvtColor(img, cv2.COLOR_BGR2HLS)
+
+
+#    def inRange_kernel(const cv::cuda::PtrStepSz<uchar3> src, cv::cuda::PtrStepSzb dst,
+#                               int lbc0, int ubc0, int lbc1, int ubc1, int lbc2, int ubc2):
+#        int x = blockIdx.x * blockDim.x + threadIdx.x
+#        int y = blockIdx.y * blockDim.y + threadIdx.y
+
+#        if (x >= src.cols | y >= src.rows) return
+
+#        uchar3 v = src(y, x)
+#        if (v.x >= lbc0 & v.x <= ubc0 & v.y >= lbc1 & v.y <= ubc1 & v.z >= lbc2 & v.z <= ubc2)
+#           dst(y, x) = 255
+#        else
+#           dst(y, x) = 0
+
+
+#    def inRange_gpu(cv::cuda::GpuMat &src, cv::Scalar &lowerb, cv::Scalar &upperb,
+#                 cv::cuda::GpuMat &dst):
+#      const int m = 32
+#      int numRows = src.rows, numCols = src.cols
+#      if (numRows == 0 | numCols == 0) return
+      # Attention! Cols Vs. Rows are reversed
+#      const dim3 gridSize(ceil((float)numCols / m), ceil((float)numRows / m), 1)
+#      const dim3 blockSize(m, m, 1)
+
+#      inRange_kernel<<<gridSize, blockSize>>>(src, dst, lowerb[0], upperb[0], lowerb[1], upperb[1],
+#                                          lowerb[2], upperb[2])
+
+
+    def colorThreshold(self, img):
+        pulled_image = img.download()
+
+        hls = cv2.cvtColor(pulled_image, cv2.COLOR_BGR2HLS)
         # define range of white color in HSV
         # change it according to your need !
-        lower_white = np.array([0,175,0], dtype=np.uint8)
+        lower_white = np.array([0,240,0], dtype=np.uint8)
         upper_white = np.array([255, 255, 255], dtype=np.uint8)
-        # Threshold the HLS image to get only white colors
+        # Threshold the HSV image to get only white colors
         mask = cv2.inRange(hls, lower_white, upper_white)
         # Bitwise-AND mask and original image
-        res = cv2.bitwise_and(edges, edges, mask= mask)
+        res = cv2.bitwise_and(hls, hls, mask= mask)
+
+        gpu_frame = cv2.cuda_GpuMat()
+        gpu_frame.upload(res)
 
         #morph = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel) #Can try this to clean up edges
-        return res
+        return gpu_frame
+
 
 
     def returnGaussianBlur(self):
-        return gaussianBlur
+        pulled_image = gaussianBlur.download()
+        return pulled_image
 
     def returnEDImage(self):
-        return edgeDetectedImage
+        pulled_image = edgeDetectedImage.download()
+        return pulled_image
 
     def returnHougedImage(self):
-        return houged
+        pulled_image = houged.download()
+        return pulled_image
 
     def returnThresholdedImage(self):
-        return thresholded
+        pulled_image = thresholded.download()
+        return pulled_image
 
     def __init__(self, image):
-        image = self.grayscale(image)
+        # upload to GPU
         gpu_frame = cv2.cuda_GpuMat()
         gpu_frame.upload(image)
-
+        
         # apply gaussian blur
+        global gaussianBlur
         kernelSize = 5
         gaussianBlur = self.gaussian_blur(gpu_frame, kernelSize)
-        return
+        gaussianBlur = self.gaussian_blur(gpu_frame, kernelSize)
+        gaussianBlur = self.gaussian_blur(gpu_frame, kernelSize)
+        gaussianBlur = self.gaussian_blur(gpu_frame, kernelSize)
+
+        # color threshold
+        global thresholded
+        thresholded = self.colorThreshold(gaussianBlur)
+        
         # canny
         minThreshold = 200
         maxThreshold = 250
         global edgeDetectedImage
-        edgeDetectedImage = self.cannyEdgeDetection(gaussianBlur, minThreshold, maxThreshold)
+        edgeDetectedImage = self.cannyEdgeDetection(thresholded, thresholded, minThreshold, maxThreshold)
+
         # hough lines
         rho = 1
         theta = np.pi/180
-        # originally 30
         hough_threshold = 40
         min_line_len = 1
         max_line_gap = 20
@@ -114,8 +160,6 @@ class ADSDetection:
         houged = self.hough_lines(edgeDetectedImage, rho, theta,
                         hough_threshold, min_line_len, max_line_gap)
         # houged = region_of_interest(houged, np.asarray(dst_points))
-        global thresholded
-        thresholded = threshold(image, houged)
 
     def cannyEdgeDetection(self, img, minThreshold, maxThreshold):
         detector = cv2.cuda.createCannyEdgeDetector(minThreshold, maxThreshold)
@@ -233,10 +277,10 @@ def callback(data):
     #rospy.loginfo("Converting perspective transformed img to edge detection image")
     bridge = CvBridge()
     timestamp = data.header.stamp
-    cv_image = bridge.imgmsg_to_cv2(data, desired_encoding='bgra8')
+    cv_image = bridge.imgmsg_to_cv2(data, desired_encoding='bgr8')
     ads = ADSDetection(cv_image)
     # publish_transform(bridge, "/cv/laneMapping/left", ads.returnCroppedImage(), timestamp)
-    publish_transform(bridge, "/cv/laneMapping/left", ads.returnGaussianBlur(), timestamp)
+    publish_transform(bridge, "/cv/laneMapping/left", ads.returnEDImage(), timestamp)
     # publish_ogrid("/cv/laneMapping/ogrid", grid, timestamp)
 
 def publish_transform(bridge, topic, cv2_img, timestamp):
@@ -265,7 +309,7 @@ def listener():
     rospy.loginfo(msg)
 
     # image_sub = message_filters.Subscriber("/cv/perspective/left", Image, queue_size = 1, buff_size=2**24)
-    image_sub = message_filters.Subscriber("/zed/zed_node/left/image_rect_gray", Image, queue_size = 1, buff_size=2**24)
+    image_sub = message_filters.Subscriber("/zed/zed_node/left/image_rect_color", Image, queue_size = 1, buff_size=2**24)
     # dst_sub = message_filters.Subscriber("/cv/perspective/dst_quad", Image, queue_size = 1, buff_size=2**24)
 
     ts = message_filters.TimeSynchronizer([image_sub], 10)

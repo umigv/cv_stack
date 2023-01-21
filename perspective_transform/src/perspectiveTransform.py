@@ -3,6 +3,7 @@
 # from tkinter import Image
 import rospy
 from sensor_msgs.msg import Image
+import cv2
 from cv_bridge import CvBridge
 from math import radians, cos
 import numpy as np
