@@ -9,10 +9,10 @@ import cv2
 # threshold using color from original image, and combine that with the houged image
 def threshold(img, edges):
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HLS)
-    # define range of white color in HLS
+    # define range of white color in HSV
     # change it according to your need !
-    lower_white = np.array([0,235,0], dtype=np.uint8)
-    upper_white = np.array([255,255,255], dtype=np.uint8)
+    lower_white = np.array([0,240,0], dtype=np.uint8)
+    upper_white = np.array([255, 255, 255], dtype=np.uint8)
     # Threshold the HSV image to get only white colors
     mask = cv2.inRange(hsv, lower_white, upper_white)
     # Bitwise-AND mask and original image
@@ -30,7 +30,7 @@ def grayscale(img):
 
 def gaussian_blur(img, kernel_size):
     """Applies a Gaussian Noise kernel"""
-    return cv2.GaussianBlur(img, (kernel_size, kernel_size), 175)
+    return cv2.GaussianBlur(img, (kernel_size, kernel_size), 200)
 
 
 def region_of_interest(img, vertices):
@@ -43,7 +43,6 @@ def region_of_interest(img, vertices):
     # decided to take this out for now since old definition of the region of
     # interest is not the same as our region of interest now,
     # feel free to add code here
-    return img
 
 
 def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
@@ -58,10 +57,9 @@ def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
     line_img = np.zeros((img.shape[0], img.shape[1], 3), dtype=np.uint8)
     # rospy.loginfo(type(lines))
     # rospy.loginfo(lines)
-    if isinstance(lines, np.ndarray):
-        if (lines.ndim > 1):
+    if isinstance(lines, np.ndarray) and len(lines) > 1:
         # rospy.loginfo(lines)
-            draw_lines(line_img, lines)
+        draw_lines(line_img, lines)
     return line_img
 
 
@@ -81,7 +79,7 @@ def draw_lines(img, lines, color=[255, 255, 255], thickness=2):
     # This can help if we want a continous probability of lines based on distance
     color_range[color_range < THRESHOLD] = 0
     for ((x1,y1,x2,y2), col) in zip(lines, color_range):
-        cv2.line(img, (x1, y1), (x2, y2), [255, 255, 255], thickness)
+        cv2.line(img, (x1, y1), (x2, y2), [0, 0, 255], thickness)
 
     # cv2.polylines is faster but can draw only one color. Thus, the only type of filtering is binary with the threshold
     # filtered_lines = lines[(color_range > THRESHOLD).ravel(), :]
@@ -89,7 +87,7 @@ def draw_lines(img, lines, color=[255, 255, 255], thickness=2):
 
 
 def detect_lanes(image):
-    
+
     # apply gaussian blur
     kernelSize = 5
     gaussianBlur = gaussian_blur(image, kernelSize)
@@ -99,37 +97,29 @@ def detect_lanes(image):
 
     global thresholded
     thresholded = threshold(gaussianBlur, gaussianBlur)
-    
-    kernel = np.ones((7,7),np.uint8)
-    opening = cv2.morphologyEx(thresholded, cv2.MORPH_OPEN, kernel)
 
     # canny
-    minThreshold = 150
-    maxThreshold = 250
+    minThreshold = 100
+    maxThreshold = 130
     global edgeDetectedImage
     edgeDetectedImage = cv2.Canny(thresholded, minThreshold, maxThreshold)
-
-    closing = cv2.morphologyEx(edgeDetectedImage, cv2.MORPH_CLOSE, kernel)
 
     # hough lines
     rho = 1
     theta = np.pi/180
     # originally 30
-    hough_threshold = 30
+    hough_threshold = 80
     min_line_len = 1
     max_line_gap = 20
     global houged
-    houged = hough_lines(closing, rho, theta,
+    houged = hough_lines(edgeDetectedImage, rho, theta,
                     hough_threshold, min_line_len, max_line_gap)
     # houged = region_of_interest(houged, np.asarray(dst_points))
-    
-    cv2.imshow("window", houged)
-    cv2.waitKey(1)
+    cv2.imshow("window", thresholded)
+    cv2.waitKey(1000)
 
 
 def main():
-    count = 0
-
     # opening the video
     cap = cv2.VideoCapture(VIDEO_PATH)
 
@@ -140,18 +130,16 @@ def main():
     # initialize frame size variables
     frame_width = int(cap.get(3))
     frame_height = int(cap.get(4))
+
+    count = 0
     # while the video is still running
     while(cap.isOpened()):
         # read each frame
         ret, frame = cap.read()
-        count += 1
-        if ret == True:
-            if count >= 0:
+        if ret == True and count % 50 == 0:
             # detect the lanes on the frame
-                detect_lanes(frame)
-            
-        else: 
-            break
+            detect_lanes(frame)
+        count += 1
     cap.release()
     cv2.destroyAllWindows()
     # out = cv2.VideoWriter('output.mp4',cv2.VideoWriter_fourcc('M','J','P','G'), 10, (frame_width,frame_height))
@@ -168,3 +156,4 @@ if __name__ == '__main__':
     else:
         VIDEO_PATH = argv[1]
     main()
+
