@@ -27,13 +27,20 @@ def colorThreshold(img):
     return gpu_frame
 
 def grayscale(img):
+    pulled_image = img.download()
+
     """Applies the Grayscale transform
     This will return an image with only one color channel
     but NOTE: to see the returned image as grayscale
     you should call plt.imshow(gray, cmap='gray')"""
-    return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    image = cv2.cvtColor(pulled_image, cv2.COLOR_BGR2GRAY)
+    gpu_frame = cv2.cuda_GpuMat()
+    gpu_frame.upload(image)
 
-def gaussian_blur(self, gpu_frame, kernel_size):
+    return gpu_frame
+
+
+def gaussian_blur(gpu_frame, kernel_size):
     """Applies a Gaussian Noise kernel"""
     f = cv2.cuda.createGaussianFilter(gpu_frame.type(), gpu_frame.type(), (kernel_size, kernel_size), 0)
     f.apply(gpu_frame, gpu_frame)
@@ -95,6 +102,7 @@ def draw_lines(img, lines, color=[255, 255, 255], thickness=2):
     # cv2.polylines(img, filtered_lines.reshape((-1, 2, 2)), False, 255, thickness) # Faster but can't draw multiple colors. Thus, no thresholding
 
 def cannyEdgeDetection(img, minThreshold, maxThreshold):
+    #image = img.download()
     detector = cv2.cuda.createCannyEdgeDetector(minThreshold, maxThreshold)
     return detector.detect(img)
 
@@ -115,12 +123,15 @@ def detect_lanes(image):
     # color threshold
     global thresholded
     thresholded = colorThreshold(gaussianBlur)
+
+    grayImage = grayscale(thresholded)
     
     # canny
     minThreshold = 200
     maxThreshold = 250
     global edgeDetectedImage
-    edgeDetectedImage = cannyEdgeDetection(thresholded, thresholded, minThreshold, maxThreshold)
+    print(type(thresholded))
+    edgeDetectedImage = cannyEdgeDetection(grayImage, minThreshold, maxThreshold)
 
     # hough lines
     rho = 1

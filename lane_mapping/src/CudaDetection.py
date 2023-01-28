@@ -148,7 +148,7 @@ class ADSDetection:
         minThreshold = 200
         maxThreshold = 250
         global edgeDetectedImage
-        edgeDetectedImage = self.cannyEdgeDetection(thresholded, thresholded, minThreshold, maxThreshold)
+        edgeDetectedImage = self.cannyEdgeDetection(thresholded, minThreshold, maxThreshold)
 
         # hough lines
         rho = 1
