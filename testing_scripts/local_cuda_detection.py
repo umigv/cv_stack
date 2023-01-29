@@ -14,7 +14,7 @@ def colorThreshold(img):
     # define range of white color in HSV
     # change it according to your need !
     lower_white = np.array([0,240,0], dtype=np.uint8)
-    upper_white = np.array([255, 255, 255], dtype=np.uint8)
+    upper_white = np.array([255,255,255], dtype=np.uint8)
     # Threshold the HSV image to get only white colors
     mask = cv2.inRange(hls, lower_white, upper_white)
     # Bitwise-AND mask and original image
@@ -42,7 +42,7 @@ def grayscale(img):
 
 def gaussian_blur(gpu_frame, kernel_size):
     """Applies a Gaussian Noise kernel"""
-    f = cv2.cuda.createGaussianFilter(gpu_frame.type(), gpu_frame.type(), (kernel_size, kernel_size), 0)
+    f = cv2.cuda.createGaussianFilter(gpu_frame.type(), gpu_frame.type(), (kernel_size, kernel_size), 100)
     f.apply(gpu_frame, gpu_frame)
     return gpu_frame
 
@@ -66,18 +66,23 @@ def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
 
     Returns an image with hough lines drawn.
     """
-    lines = cv2.HoughLinesP(img, rho, theta, threshold, np.array([]),
+    pulled_image = img.download()
+
+    lines = cv2.HoughLinesP(pulled_image, rho, theta, threshold, np.array([]),
             minLineLength=min_line_len, maxLineGap=max_line_gap)
     # import pdb; pdb.set_trace()
-    line_img = np.zeros((img.shape[0], img.shape[1], 3), dtype=np.uint8)
+    line_img = np.zeros((pulled_image.shape[0], pulled_image.shape[1], 3), dtype=np.uint8)
     # rospy.loginfo(type(lines))
     # rospy.loginfo(lines)
     if isinstance(lines, np.ndarray):
         if (lines.ndim > 1):
         # rospy.loginfo(lines)
             draw_lines(line_img, lines)
-    return line_img
 
+    gpu_frame = cv2.cuda_GpuMat()
+    gpu_frame.upload(pulled_image)
+
+    return gpu_frame
 
 def draw_lines(img, lines, color=[255, 255, 255], thickness=2):
     """
@@ -107,7 +112,7 @@ def cannyEdgeDetection(img, minThreshold, maxThreshold):
     return detector.detect(img)
 
 def detect_lanes(image):
-    
+
     # upload to GPU
     gpu_frame = cv2.cuda_GpuMat()
     gpu_frame.upload(image)
@@ -143,8 +148,10 @@ def detect_lanes(image):
     houged = hough_lines(edgeDetectedImage, rho, theta,
                     hough_threshold, min_line_len, max_line_gap)
     # houged = region_of_interest(houged, np.asarray(dst_points))
+
+    pulled_image = grayImage.download()
     
-    cv2.imshow("window", houged)
+    cv2.imshow("window", pulled_image)
     cv2.waitKey(1)
 
 def main():
