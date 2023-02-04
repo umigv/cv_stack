@@ -36,7 +36,11 @@ def main():
     # Open the camera
     err = zed.open(init_params)
     if err != sl.ERROR_CODE.SUCCESS:
+        print("unsuccessful zed opening")
         exit(1)
+    else:
+        print("successful zed opening")
+    
 
     # Create and set RuntimeParameters after opening the camera
     runtime_parameters = sl.RuntimeParameters()

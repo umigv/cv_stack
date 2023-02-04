@@ -89,18 +89,20 @@ def draw_lines(img, lines, color=[255, 255, 255], thickness=2):
     This function draws `lines` with `color` and `thickness`.
     """
     lines = np.squeeze(lines)
-    distances = np.linalg.norm(lines[:, 0:2] - lines[:, 2:], axis=1, keepdims=True)
-    MAX_COLOR = 99
-    MIN_COLOR = 0
-    m = (MAX_COLOR - MIN_COLOR)/(np.max(distances) - np.min(distances)) # Resize distances between MIN and MAX COLOR
-    color_range = m * distances
-    THRESHOLD = 50 # Get rid of lines smaller than threshold
+    if(lines.ndim >= 2):
+        print(lines)
+        distances = np.linalg.norm(lines[:, 0:2] - lines[:, 2:], axis=1, keepdims=True)
+        MAX_COLOR = 99
+        MIN_COLOR = 0
+        m = (MAX_COLOR - MIN_COLOR)/(np.max(distances) - np.min(distances)) # Resize distances between MIN and MAX COLOR
+        color_range = m * distances
+        THRESHOLD = 50 # Get rid of lines smaller than threshold
 
     # cv2.line is slow because of the for loop, but can be used to show various colors.
     # This can help if we want a continous probability of lines based on distance
-    color_range[color_range < THRESHOLD] = 0
-    for ((x1,y1,x2,y2), col) in zip(lines, color_range):
-        cv2.line(img, (x1, y1), (x2, y2), [255, 255, 255], thickness)
+        color_range[color_range < THRESHOLD] = 0
+        for ((x1,y1,x2,y2), col) in zip(lines, color_range):
+            cv2.line(img, (x1, y1), (x2, y2), [255, 255, 255], thickness)
 
     # cv2.polylines is faster but can draw only one color. Thus, the only type of filtering is binary with the threshold
     # filtered_lines = lines[(color_range > THRESHOLD).ravel(), :]
