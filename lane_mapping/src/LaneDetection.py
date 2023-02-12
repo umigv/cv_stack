@@ -123,7 +123,7 @@ class ADSDetection:
         houged = self.hough_lines(edgeDetectedImage, rho, theta,
                         hough_threshold, min_line_len, max_line_gap)
         # houged = region_of_interest(houged, np.asarray(dst_points))
-    
+
         global POTHOLES_ENABLED
         if POTHOLES_ENABLED:
             self.potholes(edgeDetectedImage, houged)
@@ -228,7 +228,7 @@ class ADSDetection:
         m.origin.position.x, m.origin.position.y = pos[:2]
         grid.info = m
         grid.data = self.convertImgToOgrid(img, height, width)
-        
+
 
     def convertImgToOgrid(self, img, height, width):
         #function to take a cv2 image and return an int8[] array

@@ -3,14 +3,10 @@ import rospy
 import numpy as np
 import cv2
 
-from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import Image
 import pyzed.sl as sl
+from cv_bridge import CvBridge
 
-
-
-#import the rospy package and the String message type
-import rospy
-from std_msgs.msg import String
 #function to publish messages at the rate of 2 messages per second
 def messagePublisher():
     # set up Zed first
@@ -38,9 +34,7 @@ def messagePublisher():
     runtime_parameters.confidence_threshold = 100
     runtime_parameters.textureness_confidence_threshold = 100
 
-    image = sl.Mat()
     depth = sl.Mat()
-    point_cloud = sl.Mat()
 
     # mirror_ref = sl.Transform()
     # mirror_ref.set_translation(sl.Translation(2.75,4.0,0))
@@ -48,24 +42,32 @@ def messagePublisher():
 
     # Now set up ROS
     #define a topic to which the messages will be published
-    message_publisher = rospy.Publisher('/cv/point_cloud_test', PointCloud2, queue_size=1)
+    message_publisher = rospy.Publisher('/cv/depth_map_test', Image, queue_size=1)
     #initialize the Publisher node. 
-    rospy.init_node('point_cloud_test', anonymous=True)
-    msg = "Initialized PointCloud2 test"
+    rospy.init_node('depth_map_test', anonymous=True)
+    msg = "Initialized Depth Map test"
     rospy.loginfo(msg)
-
+    
+    hz = 15
+    rate = rospy.Rate(hz)
+    bridge = CvBridge()
+    
     while not rospy.is_shutdown():
-        hz = 15
-        rate = rospy.Rate(hz)
-        if zed.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS:
-            zed.retrieve_measure(point_cloud, sl.MEASURE.XYZRGBA)
-            
-            point_cloud_arr = point_cloud.get_data()
 
-            message = PointCloud2()
-            message.width = point_cloud_arr.shape[0]
-            message.height = point_cloud_arr.shape[1]
+        if zed.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS:
+            zed.retrieve_measure(depth, sl.MEASURE.DEPTH)
+            timestamp = rospy.get_rostime()
+
+            depth_map_arr = depth.get_data()
             
+            message = bridge.cv2_to_imgmsg(depth_map_arr)
+            message.header.stamp = timestamp
+            rospy.loginfo(depth_map_arr[0])
+            # message = Image()
+            # message.width = depth_map_arr.shape[0]
+            # message.height = depth_map_arr.shape[1]
+            # print(type(depth_map_arr[0][0]))
+            # message.data = depth_map_arr.astype(np.int8).tolist()
             #display the message on the terminal
             #publish the message to the topic
             message_publisher.publish(message)
