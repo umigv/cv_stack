@@ -15,7 +15,7 @@ def messagePublisher():
     # Create a InitParameters object and set configuration parameters
     init_params = sl.InitParameters()
     init_params.depth_mode = sl.DEPTH_MODE.PERFORMANCE  # Use PERFORMANCE depth mode
-    init_params.coordinate_units = sl.UNIT.METER  # Use meter units (for depth measurements)
+    init_params.coordinate_units = sl.UNIT.FOOT  # Use meter units (for depth measurements)
     init_params.camera_resolution = sl.RESOLUTION.HD720
 
     # Open the camera
@@ -42,10 +42,10 @@ def messagePublisher():
 
     # Now set up ROS
     #define a topic to which the messages will be published
-    message_publisher = rospy.Publisher('/cv/depth_map_test', Image, queue_size=1)
+    message_publisher = rospy.Publisher('/cv/sdk_depth_map_test', Image, queue_size=1)
     #initialize the Publisher node. 
-    rospy.init_node('depth_map_test', anonymous=True)
-    msg = "Initialized Depth Map test"
+    rospy.init_node('sdk_depth_map_test', anonymous=True)
+    msg = "Initialized SDK Depth map test"
     rospy.loginfo(msg)
     
     hz = 15
@@ -55,14 +55,15 @@ def messagePublisher():
     while not rospy.is_shutdown():
 
         if zed.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS:
-            zed.retrieve_measure(depth, sl.MEASURE.DEPTH)
+            # zed.retrieve_measure(depth, sl.MEASURE.DEPTH)
+            zed.retrieve_image(depth, sl.VIEW.DEPTH)
             timestamp = rospy.get_rostime()
 
             depth_map_arr = depth.get_data()
             
             message = bridge.cv2_to_imgmsg(depth_map_arr)
             message.header.stamp = timestamp
-            rospy.loginfo(depth_map_arr[0])
+            # rospy.loginfo(depth_map_arr[0])
             # message = Image()
             # message.width = depth_map_arr.shape[0]
             # message.height = depth_map_arr.shape[1]
