@@ -15,14 +15,17 @@ import message_filters
 
 
 def mess_with_depth_map(cv_image, depth_image):
-    rospy.loginfo(depth_image[0][0])
+    rospy.loginfo(depth_image[100])
+    cv2.imshow("woah", depth_image)
+    cv2.waitKey(1)
+    # rospy.loginfo(depth_array[0][0])
 
 def callback(data, depth_map):
     #rospy.loginfo("Converting perspective transformed img to edge detection image")
     bridge = CvBridge()
     timestamp = data.header.stamp
     cv_image = bridge.imgmsg_to_cv2(data, desired_encoding='bgra8')
-    depth_image = bridge.imgmsg_to_cv2(data, desired_encoding='bgra8')
+    depth_image = bridge.imgmsg_to_cv2(depth_map, desired_encoding='passthrough')
     mess_with_depth_map(cv_image, depth_image)
     # publish_transform(bridge, "/cv/laneMapping/left", ads.returnCroppedImage(), timestamp)
 
