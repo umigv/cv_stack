@@ -13,7 +13,6 @@ import sys
 from cv_bridge import CvBridge
 from rospy.numpy_msg import numpy_msg
 import message_filters
-import ros_numpy
 from nav_msgs.msg import OccupancyGrid
 from nav_msgs.msg import MapMetaData
 from geometry_msgs.msg import Pose
@@ -89,7 +88,7 @@ class ADSDetection:
     def returnThresholdedImage(self):
         return thresholded
 
-    def __init__(self, image):
+    def __init__(self, image, depth_image):
 
         # apply gaussian blur
         global gaussianBlur
@@ -105,7 +104,7 @@ class ADSDetection:
         gaussianBlur = cv2.convertScaleAbs(gaussianBlur, alpha=1, beta=0)
         global thresholded
         thresholded = self.threshold(gaussianBlur, gaussianBlur)
-        
+
         # canny
         minThreshold = 100
         maxThreshold = 130
@@ -240,15 +239,16 @@ class ADSDetection:
         return img.astype(np.int8).ravel().tolist() # for ros msg
 
 
-def callback(data):
+def callback(data, depth_map):
     #rospy.loginfo("Converting perspective transformed img to edge detection image")
     bridge = CvBridge()
     timestamp = data.header.stamp
     cv_image = bridge.imgmsg_to_cv2(data, desired_encoding='bgra8')
-    ads = ADSDetection(cv_image)
-    # publish_transform(bridge, "/cv/laneMapping/left", ads.returnCroppedImage(), timestamp)
+    depth_image = bridge.imgmsg_to_cv2(depth_map, desired_encoding='passthrough')
+    ads = ADSDetection(cv_image, depth_image)
+
     publish_transform(bridge, "/cv/laneMapping/left", ads.returnEDImage(), timestamp)
-    # publish_ogrid("/cv/laneMapping/ogrid", grid, timestamp)
+
 
 def publish_transform(bridge, topic, cv2_img, timestamp):
     transformed_ros = bridge.cv2_to_imgmsg(cv2_img)
@@ -270,16 +270,15 @@ def listener():
     # anonymous=True flag means that rospy will choose a unique
     # name for our 'listener' node so that multiple listeners can
     # run simultaneously.
-    rospy.init_node('ads_detection', anonymous=True)
+    rospy.init_node('lane_detection', anonymous=True)
     global POTHOLES_ENABLED
-    msg = "Initialized ADS Detection: " + "No potholes" if not POTHOLES_ENABLED else "Potholes Enabled"
+    msg = "Initialized Lane Detection: " + "No potholes" if not POTHOLES_ENABLED else "Potholes Enabled"
     rospy.loginfo(msg)
 
-    # image_sub = message_filters.Subscriber("/cv/perspective/left", Image, queue_size = 1, buff_size=2**24)
     image_sub = message_filters.Subscriber("/zed/zed_node/left/image_rect_color", Image, queue_size = 1, buff_size=2**24)
-    # dst_sub = message_filters.Subscriber("/cv/perspective/dst_quad", Image, queue_size = 1, buff_size=2**24)
+    depth_map_sub = message_filters.Subscriber("/zed/zed_node/depth/depth_registered", Image, queue_size = 1, buff_size=2**24)
 
-    ts = message_filters.TimeSynchronizer([image_sub], 10)
+    ts = message_filters.TimeSynchronizer([image_sub, depth_map_sub], 10)
     ts.registerCallback(callback)
 
     # spin() simply keeps python from exiting until this node is stopped
