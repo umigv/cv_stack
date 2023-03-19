@@ -53,9 +53,13 @@ def messagePublisher():
     bridge = CvBridge()
     
     if zed.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS:
-            zed.retrieve_measure(depth, sl.MEASURE.DEPTH)
-            # zed.retrieve_image(depth, sl.VIEW.DEPTH)
-            timestamp = rospy.get_rostime()
+        zed.retrieve_measure(depth, sl.MEASURE.DEPTH)
+        # zed.retrieve_image(depth, sl.VIEW.DEPTH)
+        depth_map_arr = depth.get_data()
+        
+        np.savetxt('depth_map.csv', depth_map_arr, delimiter=',')
+        rospy.loginfo("depth_map.csv saved")
+    return
 
     # while not rospy.is_shutdown():
 
