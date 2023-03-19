@@ -1,12 +1,14 @@
 #!/usr/bin/env python
+import open3d
 import rospy
 import numpy as np
 import cv2
 
-from sensor_msgs.msg import Image, PointCloud2
+from sensor_msgs.msg import Image, PointCloud2, PointField
+import sensor_msgs.point_cloud2 as pc2
 
 import rospy
-from std_msgs.msg import String
+from std_msgs.msg import String, Header
 
 import sys
 from cv_bridge import CvBridge
@@ -19,12 +21,59 @@ FY = 708.4204711914062
 CX = 545.5575561523438
 CY = 333.53106689453125
 
+FIELDS_XYZ = [
+    PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
+    PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
+    PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
+]
+
 def mess_with_depth_map(cv_image, depth_image):
+    # this mask should be lane detected image
+    mask = np.ones_like(depth_image) * 255
+    
+    # now the depth image only contains the lanes
+    masked_image = cv2.bitwise_and(depth_image, mask)
+    img_array = np.array(masked_image)
 
-    # mask = np.ones_like(cv_image) * 255
+    # converting to open3d image first
+    image2 = open3d.geometry.Image(img_array.astype(np.uint16))
 
-    # masked_image = cv2.bitwise_and(cv_image, mask)
-    depth_to_point_cloud(depth_image)
+    # need to set the camera intrinsics in order to use the point cloud
+    intrins = open3d.camera.PinholeCameraIntrinsic()
+    intrins.set_intrinsics(img_array.shape[1], img_array.shape[0], FX, FY, CX, CY)
+    
+    # creating the point cloud from open3d image
+    point_cloud = open3d.geometry.PointCloud.create_from_depth_image(image2, intrins, depth_scale=100)
+
+    # visualize open3d point cloud
+    # point_cloud.transform([[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]])
+    # open3d.visualization.draw_geometries([point_cloud])
+
+    # converting to ROS point cloud from open3d point cloud
+    ros_point_cloud = convertCloudFromOpen3dToRos(point_cloud)
+    publish_point_cloud(ros_point_cloud)
+
+def convertCloudFromOpen3dToRos(open3d_cloud, frame_id="odom"):
+    # Set "header"
+    header = Header()
+    header.stamp = rospy.Time.now()
+    header.frame_id = frame_id
+
+    # Set "fields" and "cloud_data"
+    points=np.asarray(open3d_cloud.points)
+    if not open3d_cloud.colors: # XYZ only
+        fields=FIELDS_XYZ
+        cloud_data=points
+    else: # XYZ + RGB
+        fields=FIELDS_XYZRGB
+        # -- Change rgb color from "three float" to "one 24-byte int"
+        # 0x00FFFFFF is white, 0x00000000 is black.
+        colors = np.floor(np.asarray(open3d_cloud.colors)*255) # nx3 matrix
+        colors = colors[:,0] * BIT_MOVE_16 +colors[:,1] * BIT_MOVE_8 + colors[:,2]  
+        cloud_data=np.c_[points, colors]
+    
+    # create ros_cloud
+    return pc2.create_cloud(header, fields, cloud_data)
 
 def depth_to_point_cloud(img):
     # shape (621, 1104)
@@ -42,16 +91,12 @@ def depth_to_point_cloud(img):
 
     publish_point_cloud(np.array(data).astype(np.uint8).ravel().tolist())
 
-def publish_point_cloud(data):
-    cloud = PointCloud2()
-    cloud.header.stamp = rospy.Time.now()
-    cloud.header.frame_id = 'map'
-    cloud.data = data
+def publish_point_cloud(point_cloud):
 
     topic = '/cv/laneMapping/point_cloud'
     pub = rospy.Publisher(topic, PointCloud2, queue_size=3)
 
-    pub.publish(cloud)
+    pub.publish(point_cloud)
     rospy.loginfo("Published point cloud")
 
 
@@ -74,9 +119,9 @@ def listener():
     rospy.init_node('depth_map_testing', anonymous=True)
     rospy.loginfo("initialized depth_map_testing")
 
-    image_sub = message_filters.Subscriber("/zed/zed_node/left/image_rect_gray", Image, queue_size = 1, buff_size=2**24)
+    image_sub = message_filters.Subscriber("/cv/sdk_depth_map_test", Image, queue_size = 1, buff_size=2**24)
     # image_sub = message_filters.Subscriber("/zed/zed_node/left/image_rect_color", Image)
-    depth_map_sub = message_filters.Subscriber("/zed/zed_node/depth/depth_registered", Image, queue_size = 1, buff_size=2**24)
+    depth_map_sub = message_filters.Subscriber("/cv/sdk_depth_map_test", Image, queue_size = 1, buff_size=2**24)
     
     ts = message_filters.TimeSynchronizer([image_sub, depth_map_sub], 10)
     ts.registerCallback(callback)
