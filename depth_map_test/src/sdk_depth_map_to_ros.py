@@ -52,38 +52,38 @@ def messagePublisher():
     rate = rospy.Rate(hz)
     bridge = CvBridge()
     
-    if zed.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS:
-        zed.retrieve_measure(depth, sl.MEASURE.DEPTH)
-        # zed.retrieve_image(depth, sl.VIEW.DEPTH)
-        depth_map_arr = depth.get_data()
+    # if zed.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS:
+    #     zed.retrieve_measure(depth, sl.MEASURE.DEPTH)
+    #     # zed.retrieve_image(depth, sl.VIEW.DEPTH)
+    #     depth_map_arr = depth.get_data()
         
-        np.savetxt('depth_map.csv', depth_map_arr, delimiter=',')
-        rospy.loginfo("depth_map.csv saved")
-    return
+    #     np.savetxt('depth_map.csv', depth_map_arr, delimiter=',')
+    #     rospy.loginfo("depth_map.csv saved")
+    # return
 
-    # while not rospy.is_shutdown():
+    while not rospy.is_shutdown():
 
-    #     if zed.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS:
-    #         zed.retrieve_measure(depth, sl.MEASURE.DEPTH)
-    #         # zed.retrieve_image(depth, sl.VIEW.DEPTH)
-    #         timestamp = rospy.get_rostime()
+        if zed.grab(runtime_parameters) == sl.ERROR_CODE.SUCCESS:
+            zed.retrieve_measure(depth, sl.MEASURE.DEPTH)
+            # zed.retrieve_image(depth, sl.VIEW.DEPTH)
+            timestamp = rospy.get_rostime()
 
-    #         depth_map_arr = depth.get_data()
+            depth_map_arr = depth.get_data()
             
-    #         message = bridge.cv2_to_imgmsg(depth_map_arr)
-    #         message.header.stamp = timestamp
-    #         # rospy.loginfo(depth_map_arr[0])
-    #         # message = Image()
-    #         # message.width = depth_map_arr.shape[0]
-    #         # message.height = depth_map_arr.shape[1]
-    #         # print(type(depth_map_arr[0][0]))
-    #         # message.data = depth_map_arr.astype(np.int8).tolist()
-    #         # display the message on the terminal
-    #         # publish the message to the topic
-    #         message_publisher.publish(message)
-    #         rospy.loginfo("published depth image")
-    #     # rate.sleep() will wait enough until the node publishes the message to the topic
-    #     rate.sleep()
+            message = bridge.cv2_to_imgmsg(depth_map_arr)
+            message.header.stamp = timestamp
+            # rospy.loginfo(depth_map_arr[0])
+            # message = Image()
+            # message.width = depth_map_arr.shape[0]
+            # message.height = depth_map_arr.shape[1]
+            # print(type(depth_map_arr[0][0]))
+            # message.data = depth_map_arr.astype(np.int8).tolist()
+            # display the message on the terminal
+            # publish the message to the topic
+            message_publisher.publish(message)
+            rospy.loginfo("published depth image")
+        # rate.sleep() will wait enough until the node publishes the message to the topic
+        rate.sleep()
 if __name__ == '__main__':
     try:
         messagePublisher()
