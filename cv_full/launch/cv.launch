@@ -1,23 +1,18 @@
 <launch>
     <!-- <include file="$(find zed_wrapper)/launch/zed.launch"/> -->
-    <node
-        pkg="perspective_transform"
-        type="perspectiveTransform.py"
-        name="perspective_transform"
-        respawn="true"
-        />
-        <node 
+        <!-- <node 
             pkg="lane_mapping" 
-            type="ADSDetection.py" 
+            type="LaneDetection.py" 
             name="lane_mapping" 
             respawn="true"
             args=""
             output="screen"
-             />
-        <!-- <node  -->
-            <!-- pkg="layer_maps" --> 
-            <!-- name="layer_maps" --> 
-            <!-- type="layerMaps.py" --> 
-            <!-- respawn="true" -->
-            <!--  /> -->
+             /> -->
+        <node pkg="nodelet" type="nodelet" name="cloudify"
+                args="load depth_image_proc/point_cloud_xyz record_player_manager --no-bond">
+            <!-- <remap from="depth_registered/image_rect" to="camera/depth/image"/>
+            <remap from="depth_registered/points" to="camera/depth_registered/points"/>
+            <remap from="rgb/image_rect_color" to="$(arg cloud_input_ns)/image_rect_color"/>
+            <remap from="rgb/camera_info" to="$(arg cloud_input_ns)/camera_info"/> -->
+        </node>
     </launch>
