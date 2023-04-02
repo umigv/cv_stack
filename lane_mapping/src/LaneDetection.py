@@ -89,7 +89,7 @@ class ADSDetection:
         return thresholded
 
     def __init__(self, image, depth_image):
-
+        
         # apply gaussian blur
         global gaussianBlur
          # apply gaussian blur

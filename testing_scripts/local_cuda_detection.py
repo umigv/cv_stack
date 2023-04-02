@@ -42,7 +42,7 @@ def grayscale(img):
 
 def gaussian_blur(gpu_frame, kernel_size):
     """Applies a Gaussian Noise kernel"""
-    f = cv2.cuda.createGaussianFilter(gpu_frame.type(), gpu_frame.type(), (kernel_size, kernel_size), 100)
+    f = cv2.cuda.createGaussianFilter(gpu_frame.type(), gpu_frame.type(), (kernel_size, kernel_size), 150)
     f.apply(gpu_frame, gpu_frame)
     return gpu_frame
 
@@ -57,7 +57,14 @@ def region_of_interest(img, vertices):
     # decided to take this out for now since old definition of the region of
     # interest is not the same as our region of interest now,
     # feel free to add code here
-    return img
+    image = img.download()
+    mask = np.zeros_like(image)
+    match_mask_color = 255
+    cv2.fillPoly(mask, np.int32([vertices]), match_mask_color)
+    masked_image = cv2.bitwise_and(image, mask)
+    gpu_frame = cv2.cuda_GpuMat()
+    gpu_frame.upload(masked_image)
+    return gpu_frame
 
 
 def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
@@ -80,7 +87,7 @@ def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
             draw_lines(line_img, lines)
 
     gpu_frame = cv2.cuda_GpuMat()
-    gpu_frame.upload(pulled_image)
+    gpu_frame.upload(line_img)
 
     return gpu_frame
 
@@ -114,46 +121,65 @@ def cannyEdgeDetection(img, minThreshold, maxThreshold):
     return detector.detect(img)
 
 def detect_lanes(image):
+    height = image.shape[0]
+    width = image.shape[1]
+    region_of_interest_vertices = [
+        (0, height),
+        (0, height/5),
+        (width, height/ 5),
+        (width, height),
+    ]
+
+    kernel = np.ones((7,7),np.uint8)
 
     # upload to GPU
     gpu_frame = cv2.cuda_GpuMat()
     gpu_frame.upload(image)
-    
-    # apply gaussian blur
-    global gaussianBlur
-    kernelSize = 5
-    gaussianBlur = gaussian_blur(gpu_frame, kernelSize)
-    gaussianBlur = gaussian_blur(gpu_frame, kernelSize)
-    gaussianBlur = gaussian_blur(gpu_frame, kernelSize)
-    gaussianBlur = gaussian_blur(gpu_frame, kernelSize)
 
     # color threshold
     global thresholded
-    thresholded = colorThreshold(gaussianBlur)
+    thresholded = colorThreshold(gpu_frame)
 
-    grayImage = grayscale(thresholded)
+    # apply gaussian blur
+    global gaussianBlur
+    kernelSize = 5
+    gaussianBlur = gaussian_blur(thresholded, kernelSize)
+    gaussianBlur = gaussian_blur(gaussianBlur, kernelSize)
+    gaussianBlur = gaussian_blur(gaussianBlur, kernelSize)
+    gaussianBlur = gaussian_blur(gaussianBlur, kernelSize)
+
+    #closing = cv2.morphologyEx(thresholded, cv2.MORPH_CLOSE, kernel)
+
+    #opening = cv2.morphologyEx(closing, cv2.MORPH_OPEN,kernel)
+
+    grayImage = grayscale(gaussianBlur)
+    #grayImage = grayscale(opening)
     
     # canny
-    minThreshold = 200
-    maxThreshold = 250
+    minThreshold = 150
+    maxThreshold = 230
     global edgeDetectedImage
     print(type(thresholded))
     edgeDetectedImage = cannyEdgeDetection(grayImage, minThreshold, maxThreshold)
+    
+    cropped = region_of_interest(edgeDetectedImage, np.array([region_of_interest_vertices]))
+    
+    image = cropped.download()
+    closing = cv2.morphologyEx(image, cv2.MORPH_CLOSE, kernel)
 
     # hough lines
     rho = 1
     theta = np.pi/180
-    hough_threshold = 40
+    hough_threshold = 30
     min_line_len = 1
     max_line_gap = 20
     global houged
     houged = hough_lines(edgeDetectedImage, rho, theta,
                     hough_threshold, min_line_len, max_line_gap)
-    # houged = region_of_interest(houged, np.asarray(dst_points))
-
-    pulled_image = grayImage.download()
     
-    cv2.imshow("window", pulled_image)
+    pulled_image = cropped.download()
+    
+    cv2.imshow("window", closing)
     cv2.waitKey(1)
 
 def main():

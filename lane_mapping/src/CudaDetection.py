@@ -14,7 +14,6 @@ import sys
 from cv_bridge import CvBridge
 from rospy.numpy_msg import numpy_msg
 import message_filters
-import ros_numpy
 from nav_msgs.msg import OccupancyGrid
 from nav_msgs.msg import MapMetaData
 from geometry_msgs.msg import Pose
@@ -91,13 +90,12 @@ class ADSDetection:
 
 
     def colorThreshold(self, img):
-        pulled_image = img.download()
 
-        hls = cv2.cvtColor(pulled_image, cv2.COLOR_BGR2HLS)
+        hls = cv2.cvtColor(img, cv2.COLOR_BGR2HLS)
         # define range of white color in HSV
         # change it according to your need !
-        lower_white = np.array([0,240,0], dtype=np.uint8)
-        upper_white = np.array([255, 255, 255], dtype=np.uint8)
+        lower_white = np.array([0,150,0], dtype=np.uint8)
+        upper_white = np.array([255,255,255], dtype=np.uint8)
         # Threshold the HSV image to get only white colors
         mask = cv2.inRange(hls, lower_white, upper_white)
         # Bitwise-AND mask and original image
@@ -111,176 +109,123 @@ class ADSDetection:
 
 
 
-    def returnGaussianBlur(self):
+    def returnGaussianBlur(self, depth_image):
         pulled_image = gaussianBlur.download()
+
+        masked_image = cv2.bitwise_and(depth_image, pulled_image)
+
         return pulled_image
 
-    def returnEDImage(self):
+    def returnEDImage(self, depth_image):
         pulled_image = edgeDetectedImage.download()
+        
+        masked_image = cv2.bitwise_and(depth_image, pulled_image)
+        
         return pulled_image
 
-    def returnHougedImage(self):
+    def returnHougedImage(self, depth_image):
         pulled_image = houged.download()
+        
+        mask = np.ones_like(depth_image) * 255
+        masked_image = cv2.bitwise_and(depth_image, mask)
+        
         return pulled_image
 
-    def returnThresholdedImage(self):
+    def returnThresholdedImage(self, depth_image):
         pulled_image = thresholded.download()
+        
+        mask = np.ones_like(depth_image) * 255
+        masked_image = cv2.bitwise_and(depth_image, mask)
+        
         return pulled_image
+
+    def returnCroppedImage(self, depth_image):
+        pulled_image = cropped.download()
+        
+        mask = np.ones_like(depth_image) * 255
+        masked_image = cv2.bitwise_and(depth_image, mask)
+        
+        return pulled_image
+    
 
     def __init__(self, image):
-        # upload to GPU
-        gpu_frame = cv2.cuda_GpuMat()
-        gpu_frame.upload(image)
+
+        # color threshold and upload to gpu
+        global thresholded
+        thresholded = self.colorThreshold(image)
         
         # apply gaussian blur
         global gaussianBlur
         kernelSize = 5
-        gaussianBlur = self.gaussian_blur(gpu_frame, kernelSize)
-        gaussianBlur = self.gaussian_blur(gpu_frame, kernelSize)
-        gaussianBlur = self.gaussian_blur(gpu_frame, kernelSize)
-        gaussianBlur = self.gaussian_blur(gpu_frame, kernelSize)
+        gaussianBlur = self.gaussian_blur(thresholded, kernelSize)
 
-        # color threshold
-        global thresholded
-        thresholded = self.colorThreshold(gaussianBlur)
+        grayImage = self.grayscale(gaussianBlur)
         
         # canny
-        minThreshold = 200
-        maxThreshold = 250
+        minThreshold = 150
+        maxThreshold = 230
         global edgeDetectedImage
-        edgeDetectedImage = self.cannyEdgeDetection(thresholded, minThreshold, maxThreshold)
+        edgeDetectedImage = self.cannyEdgeDetection(grayImage, minThreshold, maxThreshold)
 
-        # hough lines
-        rho = 1
-        theta = np.pi/180
-        hough_threshold = 40
-        min_line_len = 1
-        max_line_gap = 20
-        global houged
-        houged = self.hough_lines(edgeDetectedImage, rho, theta,
-                        hough_threshold, min_line_len, max_line_gap)
-        # houged = region_of_interest(houged, np.asarray(dst_points))
 
+    
     def cannyEdgeDetection(self, img, minThreshold, maxThreshold):
         detector = cv2.cuda.createCannyEdgeDetector(minThreshold, maxThreshold)
         return detector.detect(img)
 
-    def grayscale(self,img):
+    def grayscale(self, img):
+        pulled_image = img.download()
+
         """Applies the Grayscale transform
         This will return an image with only one color channel
         but NOTE: to see the returned image as grayscale
         you should call plt.imshow(gray, cmap='gray')"""
-        return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        image = cv2.cvtColor(pulled_image, cv2.COLOR_BGR2GRAY)
+        gpu_frame = cv2.cuda_GpuMat()
+        gpu_frame.upload(image)
+
+        return gpu_frame
 
     def gaussian_blur(self, gpu_frame, kernel_size):
         """Applies a Gaussian Noise kernel"""
-        f = cv2.cuda.createGaussianFilter(gpu_frame.type(), gpu_frame.type(), (kernel_size, kernel_size), 0)
+        f = cv2.cuda.createGaussianFilter(gpu_frame.type(), gpu_frame.type(), (kernel_size, kernel_size), 150)
         f.apply(gpu_frame, gpu_frame)
         return gpu_frame
 
-    def region_of_interest(self,img, vertices):
+    def region_of_interest(self, img, vertices):
         """
         Applies an image mask.
 
         Only keeps the region of the image defined by the polygon
         formed from `vertices`. The rest of the image is set to black.
         """
-        #defining a blank mask to start with
-        mask = np.zeros_like(img)
+        # decided to take this out for now since old definition of the region of
+        # interest is not the same as our region of interest now,
+        # feel free to add code here
+        image = img.download()
+        mask = np.zeros_like(image)
+        match_mask_color = 255
+        cv2.fillPoly(mask, np.int32([vertices]), match_mask_color)
+        masked_image = cv2.bitwise_and(image, mask)
+        gpu_frame = cv2.cuda_GpuMat()
+        gpu_frame.upload(masked_image)
+        return gpu_frame
 
-        #defining a 3 channel or 1 channel color to fill the mask with
-        #depending on the input image
-        if len(img.shape) > 2:
-            channel_count = img.shape[2]  # i.e. 3 or 4 depending on your image
-            ignore_mask_color = (255,) * channel_count
-        else:
-            ignore_mask_color = 255
-
-        #filling pixels inside the polygon defined by "vertices" with the fill color
-        cv2.fillPoly(mask, np.int32([vertices]), ignore_mask_color)
-
-        #returning the image only where mask pixels are nonzero
-        masked_image = cv2.bitwise_and(img, mask)
-        return masked_image
-
-
-    def hough_lines(self,img, rho, theta, threshold, min_line_len, max_line_gap):
-        """
-        `img` should be the output of a Canny transform.
-
-        Returns an image with hough lines drawn.
-        """
-        lines = cv2.HoughLinesP(img, rho, theta, threshold, np.array([]),
-                minLineLength=min_line_len, maxLineGap=max_line_gap)
-        # import pdb; pdb.set_trace()
-        line_img = np.zeros((img.shape[0], img.shape[1], 3), dtype=np.uint8)
-        # rospy.loginfo(type(lines))
-        # rospy.loginfo(lines)
-        if isinstance(lines, np.ndarray) and len(lines) > 1:
-            # rospy.loginfo(lines)
-            self.draw_lines(line_img, lines)
-        return line_img
+    def cannyEdgeDetection(self, img, minThreshold, maxThreshold):
+        #image = img.download()
+        detector = cv2.cuda.createCannyEdgeDetector(minThreshold, maxThreshold)
+        return detector.detect(img)
 
 
-
-    def draw_lines(self,img, lines, color=[255, 255, 255], thickness=2):
-        """
-        This function draws `lines` with `color` and `thickness`.
-        """
-        lines = np.squeeze(lines)
-        distances = np.linalg.norm(lines[:, 0:2] - lines[:, 2:], axis=1, keepdims=True)
-        MAX_COLOR = 99
-        MIN_COLOR = 0
-        m = (MAX_COLOR - MIN_COLOR)/(np.max(distances) - np.min(distances)) # Resize distances between MIN and MAX COLOR
-        color_range = m * distances
-        THRESHOLD = 50 # Get rid of lines smaller than threshold
-
-        # cv2.line is slow because of the for loop, but can be used to show various colors.
-        # This can help if we want a continous probability of lines based on distance
-        color_range[color_range < THRESHOLD] = 0
-        for ((x1,y1,x2,y2), col) in zip(lines, color_range):
-            cv2.line(img, (x1, y1), (x2, y2), [0, 0, 255], thickness)
-
-        # cv2.polylines is faster but can draw only one color. Thus, the only type of filtering is binary with the threshold
-        # filtered_lines = lines[(color_range > THRESHOLD).ravel(), :]
-        # cv2.polylines(img, filtered_lines.reshape((-1, 2, 2)), False, 255, thickness) # Faster but can't draw multiple colors. Thus, no thresholding
-
-
-    def convertToOccupancy(self, img):
-        # function to take in the final lane detected image and convert into an occupancy grid
-        height, width = img.shape[:2]
-        resolution = 0.05 
-        global grid
-        grid = OccupancyGrid()
-        m = MapMetaData()
-        m.resolution = resolution
-        m.width = width
-        m.height = height
-        pos = np.array([-width * resolution / 2, -height * resolution / 2, 0])
-        m.origin = Pose()
-        m.origin.position.x, m.origin.position.y = pos[:2]
-        grid.info = m
-        grid.data = self.convertImgToOgrid(img, height, width)
-        
-
-    def convertImgToOgrid(self, img, height, width):
-        #function to take a cv2 image and return an int8[] array
-
-        img = img[:, :, 0].astype(np.int16)
-        img[img == 100] = -1
-        # img[img > 0] = 100
-
-        return img.astype(np.int8).ravel().tolist() # for ros msg
-
-
-def callback(data):
+def callback(image, depth_image):
     #rospy.loginfo("Converting perspective transformed img to edge detection image")
     bridge = CvBridge()
-    timestamp = data.header.stamp
-    cv_image = bridge.imgmsg_to_cv2(data, desired_encoding='bgr8')
+    timestamp = image.header.stamp
+    cv_image = bridge.imgmsg_to_cv2(image, desired_encoding='bgr8')
+    depth_image = bridge.imgmsg_to_cv2(depth_image, desired_encoding='passthrough')
     ads = ADSDetection(cv_image)
-    # publish_transform(bridge, "/cv/laneMapping/left", ads.returnCroppedImage(), timestamp)
-    publish_transform(bridge, "/cv/laneMapping/left", ads.returnEDImage(), timestamp)
+    publish_transform(bridge, "/cv/laneMapping/left", ads.returnGaussianBlur(depth_image), timestamp)
+    # publish_transform(bridge, "/cv/laneMapping/left", ads.returnEDImage(), timestamp)
     # publish_ogrid("/cv/laneMapping/ogrid", grid, timestamp)
 
 def publish_transform(bridge, topic, cv2_img, timestamp):
@@ -308,11 +253,11 @@ def listener():
     msg = "Initialized ADS Detection: " + "No potholes" if not POTHOLES_ENABLED else "Potholes Enabled"
     rospy.loginfo(msg)
 
-    # image_sub = message_filters.Subscriber("/cv/perspective/left", Image, queue_size = 1, buff_size=2**24)
-    image_sub = message_filters.Subscriber("/zed/zed_node/left/image_rect_color", Image, queue_size = 1, buff_size=2**24)
-    # dst_sub = message_filters.Subscriber("/cv/perspective/dst_quad", Image, queue_size = 1, buff_size=2**24)
-
-    ts = message_filters.TimeSynchronizer([image_sub], 10)
+    image_sub = message_filters.Subscriber("/zed/zed_node/left/image_rect_gray", Image, queue_size = 1, buff_size=2**24)
+    # image_sub = message_filters.Subscriber("/zed/zed_node/left/image_rect_color", Image)
+    depth_map_sub = message_filters.Subscriber("/zed/zed_node/depth/depth_registered", Image, queue_size = 1, buff_size=2**24)
+    
+    ts = message_filters.TimeSynchronizer([image_sub, depth_map_sub], 10)
     ts.registerCallback(callback)
 
     # spin() simply keeps python from exiting until this node is stopped
