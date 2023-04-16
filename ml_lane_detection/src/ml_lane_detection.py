@@ -23,8 +23,8 @@ import torchvision.transforms as transforms
 #Define the model architecture
 class lane_detection_model(nn.Module):
 
-	def init(self):
-		super(lane_detection_model, self).init()
+	def __init__(self):
+		super(lane_detection_model, self).__init__()
 		self.model = nn.Sequential(
 			nn.Conv2d( in_channels=3 , out_channels=20 , kernel_size=15 , padding=7 , stride=1 ),
 			nn.BatchNorm2d(20),
@@ -33,8 +33,8 @@ class lane_detection_model(nn.Module):
 			nn.BatchNorm2d(10),
 			nn.LeakyReLU(),
 			nn.Conv2d( in_channels=10 , out_channels=2 , kernel_size=15 , padding=7 , stride=1 ),
-	)
-  
+		)
+
 	def forward(self, input):
 		output = self.model(input)
 		return output
@@ -42,21 +42,20 @@ class lane_detection_model(nn.Module):
 class MLDetection:
 
 	def __init__(self, image):
-		rospy.loginfo("hey")
 		# if "var" in globals():
-
-		self.device = torch.device("cpu")
-		# if torch.cuda.is_available():
-		# 	rospy.loginfo("Using the GPU! :)")
-		# else:
-		# 	rospy.loginfo("Using the CPU! :'(")
-
+		if torch.cuda.is_available():
+			rospy.loginfo("Using the GPU! :)")
+		else:
+			rospy.loginfo("Using the CPU! :'(")
+		self.device = torch.device("cuda")
+		
 
 		#Initialize the model
 		self.ml_lane_detector = lane_detection_model().to(self.device)
 		model_weight_path = "/home/umarv/catkin_ws/src/cv_stack/ml_lane_detection/model_weights.pth"
 		# self.ml_lane_detector = torch.load(model_weight_path, map_location=torch.device('cpu'))
-		self.ml_lane_detector.load_state_dict(torch.load(model_weight_path), map_location=torch.device('cpu')) 
+
+		self.ml_lane_detector.load_state_dict(torch.load(model_weight_path, map_location=self.device), strict=False) 
 		rospy.loginfo("model initialized")
 		tensor_transform = transforms.ToTensor()
 		downscale_transform = transforms.Resize((128, 128))
@@ -67,11 +66,26 @@ class MLDetection:
 		image = downscale_transform(image)
 		image = image.to(self.device)
 		image = image.unsqueeze(dim=0)
+		# rospy.loginfo(f"{image.shape=}")
 	
 		lane_mask = self.ml_lane_detector(image)
-		lane_mask = lane_mask[0]
-		lane_mask = upscale_transform(lane_mask)
-		lane_mask = lane_mask.cpu().numpy()
+		# lane_mask = lane_mask[0,1,:,:]
+		# rospy.loginfo(lane_mask.shape)
+		# lane_mask = upscale_transform(lane_mask)
+
+		soft = nn.Softmax(dim=1)
+		soft_output = soft(lane_mask)
+
+		#Get the output of the ones class
+		ones_output = soft_output[0,1,:,:]
+
+		#Thresholded output
+		output = torch.zeros(ones_output.shape, device=self.device)
+		self.output_threshold = 0.3
+		output[ones_output > self.output_threshold] = 1
+
+		lane_mask = output
+		lane_mask = lane_mask.detach().cpu().numpy()
 		self.output = lane_mask
 		rospy.loginfo("model run")
 
