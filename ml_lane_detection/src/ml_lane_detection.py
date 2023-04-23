@@ -41,22 +41,21 @@ class lane_detection_model(nn.Module):
 
 class MLDetection:
 
-	def __init__(self, image):
-		# if "var" in globals():
+	def __init__(self):
 		if torch.cuda.is_available():
 			rospy.loginfo("Using the GPU! :)")
 		else:
 			rospy.loginfo("Using the CPU! :'(")
-		self.device = torch.device("cuda")
-		
-
-		#Initialize the model
+		self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+		# initializing model
 		self.ml_lane_detector = lane_detection_model().to(self.device)
 		model_weight_path = "/home/umarv/catkin_ws/src/cv_stack/ml_lane_detection/model_weights.pth"
-		# self.ml_lane_detector = torch.load(model_weight_path, map_location=torch.device('cpu'))
-
 		self.ml_lane_detector.load_state_dict(torch.load(model_weight_path, map_location=self.device), strict=False) 
+		# self.ml_lane_detector = torch.load(model_weight_path, map_location=torch.device('cpu'))
 		rospy.loginfo("model initialized")
+
+	def detect(image):
+
 		tensor_transform = transforms.ToTensor()
 		downscale_transform = transforms.Resize((128, 128))
 		upscale_transform = transforms.Resize((621, 1104))
@@ -95,11 +94,12 @@ class MLDetection:
 
 def callback(image, depth_image):
 	#rospy.loginfo("Converting perspective transformed img to edge detection image")
+	global model
 	bridge = CvBridge()
 	timestamp = image.header.stamp
 	cv_image = bridge.imgmsg_to_cv2(image, desired_encoding='bgr8')
 	depth_image = bridge.imgmsg_to_cv2(depth_image, desired_encoding='passthrough')
-	lanes = MLDetection(cv_image)
+	lanes = model.detect(cv_image)
 	publish_transform(bridge, "/cv/ml/left", lanes.returnOutput(), timestamp)
 
 def publish_transform(bridge, topic, cv2_img, timestamp):
@@ -133,6 +133,11 @@ def listener():
 
 if __name__ == '__main__':
 	try:
+		# initializing model
+		global model
+		model = MLDetection()
+
+		# ROS listener
 		listener()
 	except rospy.ROSInterruptException:
 		pass

@@ -74,63 +74,55 @@ class ADSDetection:
         # Bitwise-AND mask and original image
         res = cv2.bitwise_and(hls, hls, mask= mask)
 
-        gpu_frame = cv2.cuda_GpuMat()
-        gpu_frame.upload(res)
-
-        #morph = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel) #Can try this to clean up edges
-        return gpu_frame
+        return res
 
 
     def returnGaussianBlur(self, depth_image):
-        pulled_image = gaussianBlur.download()
 
         # there's no hls to gray conversion, so have to go to bgr first
         # can also try extracting just the luminance column
-        pulled_image = cv2.cvtColor(pulled_image, cv2.COLOR_HLS2BGR)
-        pulled_image = cv2.cvtColor(pulled_image, cv2.COLOR_BGR2GRAY)
+        gaussianBlur = cv2.cvtColor(gaussianBlur, cv2.COLOR_HLS2BGR)
+        gaussianBlur = cv2.cvtColor(gaussianBlur, cv2.COLOR_BGR2GRAY)
 
-        masked_image = cv2.bitwise_and(depth_image, depth_image, mask=pulled_image)
+        masked_image = cv2.bitwise_and(depth_image, depth_image, mask=gaussianBlur)
 
         return masked_image
 
     def returnEDImage(self, depth_image):
-        pulled_image = edgeDetectedImage.download()
 
-        masked_image = cv2.bitwise_and(depth_image, depth_image, mask=pulled_image)
+        masked_image = cv2.bitwise_and(depth_image, depth_image, mask=edgeDetectedImage)
 
         return masked_image
 
     def returnThresholdedImage(self, depth_image):
-        pulled_image = thresholded.download()
 
         # there's no hls to gray conversion, so have to go to bgr first
         # can also try extracting just the luminance column
-        pulled_image = cv2.cvtColor(pulled_image, cv2.COLOR_HLS2BGR)
-        pulled_image = cv2.cvtColor(pulled_image, cv2.COLOR_BGR2GRAY)
+        thresholded = cv2.cvtColor(thresholded, cv2.COLOR_HLS2BGR)
+        thresholded = cv2.cvtColor(thresholded, cv2.COLOR_BGR2GRAY)
 
-        masked_image = cv2.bitwise_and(depth_image, depth_image, mask=pulled_image)
+        masked_image = cv2.bitwise_and(depth_image, depth_image, mask=thresholded)
 
         return masked_image
 
     def returnCroppedImage(self, depth_image):
-        pulled_image = cropped.download()
 
         # there's no hls to gray conversion, so have to go to bgr first
         # can also try extracting just the luminance column
-        pulled_image = cv2.cvtColor(pulled_image, cv2.COLOR_HLS2BGR)
-        pulled_image = cv2.cvtColor(pulled_image, cv2.COLOR_BGR2GRAY)
+        cropped = cv2.cvtColor(cropped, cv2.COLOR_HLS2BGR)
+        cropped = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
 
-        masked_image = cv2.bitwise_and(depth_image, depth_image, mask=pulled_image)
+        masked_image = cv2.bitwise_and(depth_image, depth_image, mask=cropped)
 
         return masked_image
     
 
     def __init__(self, image):
 
-        # color threshold and upload to gpu
+        # color threshold
         global thresholded
         thresholded = self.colorThreshold(image)
-        
+
         # apply gaussian blur
         global gaussianBlur
         kernelSize = 5
@@ -146,29 +138,22 @@ class ADSDetection:
 
     
     def cannyEdgeDetection(self, img, minThreshold, maxThreshold):
-        detector = cv2.cuda.createCannyEdgeDetector(minThreshold, maxThreshold)
-        return detector.detect(img)
+        return cv2.Canny(img, minThreshold, maxThreshold)
 
     def grayscale(self, img):
-        pulled_image = img.download()
-
         """Applies the Grayscale transform
         This will return an image with only one color channel
         but NOTE: to see the returned image as grayscale
         you should call plt.imshow(gray, cmap='gray')"""
         # since the image will be in hls, we convert to bgr then gray
-        image = cv2.cvtColor(pulled_image, cv2.COLOR_HLS2BGR)
-        image = cv2.cvtColor(pulled_image, cv2.COLOR_BGR2GRAY)
-        gpu_frame = cv2.cuda_GpuMat()
-        gpu_frame.upload(image)
+        image = cv2.cvtColor(img, cv2.COLOR_HLS2BGR)
+        image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        return gpu_frame
+        return image
 
-    def gaussian_blur(self, gpu_frame, kernel_size):
+    def gaussian_blur(self, img, kernel_size):
         """Applies a Gaussian Noise kernel"""
-        f = cv2.cuda.createGaussianFilter(gpu_frame.type(), gpu_frame.type(), (kernel_size, kernel_size), 150)
-        f.apply(gpu_frame, gpu_frame)
-        return gpu_frame
+        return cv2.GaussianBlur(img, (kernel_size, kernel_size), 0)
 
     def region_of_interest(self, img, vertices):
         """
@@ -180,18 +165,11 @@ class ADSDetection:
         # decided to take this out for now since old definition of the region of
         # interest is not the same as our region of interest now,
         # feel free to add code here
-        image = img.download()
         mask = np.zeros_like(image)
         match_mask_color = 255
         cv2.fillPoly(mask, np.int32([vertices]), match_mask_color)
         masked_image = cv2.bitwise_and(image, mask)
-        gpu_frame = cv2.cuda_GpuMat()
-        gpu_frame.upload(masked_image)
-        return gpu_frame
-
-    def cannyEdgeDetection(self, img, minThreshold, maxThreshold):
-        detector = cv2.cuda.createCannyEdgeDetector(minThreshold, maxThreshold)
-        return detector.detect(img)
+        return masked_image
 
 
 def callback(image, depth_image, camera_info):
