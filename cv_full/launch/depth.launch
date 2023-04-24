@@ -1,6 +1,6 @@
 <launch>
 
-  <!-- <include file="$(find zed_wrapper)/launch/zed.launch"/> -->
+  <include file="$(find zed_wrapper)/launch/zed.launch"/>
 
   <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" />
 
@@ -14,7 +14,7 @@
       />
 
   <!-- Non rgb point cloud without lane detection-->
-    <!-- <node pkg="nodelet" type="nodelet" name="nodelet1"
+    <!-- <node pkg="nodelet" type="nodelet" name="nodelet1" respawn="true"
         args="load depth_image_proc/point_cloud_xyz nodelet_manager">
       <remap from="camera_info" to="/zed/zed_node/depth/camera_info"/>
       <remap from="image_rect" to="/zed/zed_node/depth/depth_registered"/>
@@ -22,15 +22,14 @@
     </node> -->
 
   <!-- Non rgb point cloud with lane detection-->
-    <node pkg="nodelet" type="nodelet" name="nodelet1"
+    <node pkg="nodelet" type="nodelet" name="nodelet1" respawn="true"
         args="load depth_image_proc/point_cloud_xyz nodelet_manager">
       <remap from="camera_info" to="/cv/laneMapping/camera_info"/>
       <remap from="image_rect" to="/cv/laneMapping/left"/>
-      <remap from="points" to="/cv/laneMapping/point_cloud"/>
     </node>
 
-    <!-- This is the rgb point cloud, which is unnecessary for the robot -->
-  <!-- <node pkg="nodelet" type="nodelet" name="nodelet1"
+    <!-- This is the rgb point cloud without lane detection -->
+  <!-- <node pkg="nodelet" type="nodelet" name="nodelet1" respawn="true"
         args="load depth_image_proc/point_cloud_xyzrgb nodelet_manager">
     <remap from="rgb/image_rect_color" to="/zed/zed_node/rgb/image_rect_color"/>
     <remap from="rgb/camera_info" to="/zed/zed_node/depth/camera_info"/>
