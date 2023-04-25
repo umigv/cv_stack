@@ -171,38 +171,48 @@ class ADSDetection:
         masked_image = cv2.bitwise_and(image, mask)
         return masked_image
 
+camera_info_ros = CameraInfo()
+transformed_ros = Image()
 
 def callback(image, depth_image, camera_info):
     #rospy.loginfo("Converting perspective transformed img to edge detection image")
     bridge = CvBridge()
-    timestamp = image.header.stamp
+    # timestamp = image.header.stamp
     cv_image = bridge.imgmsg_to_cv2(image, desired_encoding='bgr8')
     depth_image = bridge.imgmsg_to_cv2(depth_image, desired_encoding='passthrough')
     ads = ADSDetection(cv_image)
-    publish_transform(bridge, "/cv/laneMapping/left", ads.returnEDImage(depth_image), timestamp)
+    publish_transform(bridge, ads.returnEDImage(depth_image))
     """
     we are publishing this because for some reason the depth.launch
     file is looking for a topic with this exact name, even though
     I feel that it should be able to find /zed/zed_node/depth/camera_info
     This is a workaround, we are not editing the camera info at all
     """
-    publish_camera_info("/cv/laneMapping/camera_info", camera_info, timestamp)
+    publish_camera_info(camera_info)
 
-def publish_transform(bridge, topic, cv2_img, timestamp):
+def publish_transform(bridge, cv2_img):
+    global transformed_ros
     transformed_ros = bridge.cv2_to_imgmsg(cv2_img)
-    transformed_ros.header.stamp = timestamp
     transformed_ros.header.frame_id = "zed_left_camera_optical_frame"
-    pub = rospy.Publisher(topic, Image, queue_size=1)
-    pub.publish(transformed_ros)
-    rospy.loginfo("Published transform")
 
-def publish_camera_info(topic, camera_info, timestamp):
-    camera_info.header.stamp = timestamp
-    pub = rospy.Publisher(topic, CameraInfo, queue_size=1)
-    pub.publish(camera_info)
-    rospy.loginfo("Published camera info")
+
+    # pub = rospy.Publisher(topic, Image, queue_size=1)
+    # pub.publish(transformed_ros)
+    # rospy.loginfo("Published transform")
+
+def publish_camera_info(camera_info):
+    global camera_info_ros
+    camera_info_ros = camera_info
+
+
+    # pub = rospy.Publisher(topic, CameraInfo, queue_size=1)
+    # pub.publish(camera_info)
+    # rospy.loginfo("Published camera info")
+
 
 def listener():
+    global camera_info_ros
+    global transformed_ros
     # In ROS, nodes are uniquely named. If two nodes with the same
     # name are launched, the previous one is kicked off. The
     # anonymous=True flag means that rospy will choose a unique
@@ -220,6 +230,23 @@ def listener():
     camera_info_sub = message_filters.Subscriber("/zed/zed_node/depth/camera_info", CameraInfo, queue_size = 1, buff_size=2**24)
     ts = message_filters.TimeSynchronizer([image_sub, depth_map_sub, camera_info_sub], 10)
     ts.registerCallback(callback)
+
+    rate = rospy.Rate(10)
+    transform_pub = rospy.Publisher("/cv/laneMapping/left", Image, queue_size=1)
+    camera_info_pub = rospy.Publisher("/cv/laneMapping/camera_info", CameraInfo, queue_size=1)
+
+    log = rospy.get_param("log_info")
+
+    while not rospy.is_shutdown():
+        rate.sleep()
+        time = rospy.Time.now()
+        transformed_ros.header.stamp = time
+        camera_info_ros.header.stamp = time
+        transform_pub.publish(transformed_ros)
+        camera_info_pub.publish(camera_info_ros)
+        if log:
+            rospy.loginfo("Published transform and camera info")
+        
 
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()

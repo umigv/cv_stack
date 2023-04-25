@@ -4,6 +4,8 @@
 
   <node pkg="nodelet" type="nodelet" name="nodelet_manager" args="manager" />
 
+  <param name="log_info" value="false" />
+
   <node 
     pkg="lane_mapping" 
     type="CudaDetection.py" 
