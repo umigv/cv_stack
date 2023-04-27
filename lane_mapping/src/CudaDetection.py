@@ -193,7 +193,7 @@ def callback(image, depth_image, camera_info):
     cv_image = bridge.imgmsg_to_cv2(image, desired_encoding='bgr8')
     depth_image = bridge.imgmsg_to_cv2(depth_image, desired_encoding='passthrough')
     ads = ADSDetection(cv_image)
-    publish_transform(bridge, ads.returnEDImage(depth_image))
+    publish_transform(bridge, ads.returnDilatedImage(depth_image))
     """
     we are publishing this because for some reason the depth.launch
     file is looking for a topic with this exact name, even though
