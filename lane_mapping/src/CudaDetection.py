@@ -23,6 +23,30 @@ from geometry_msgs.msg import Pose
 
 
 class ADSDetection:
+    
+    def __init__(self, image):
+
+        # color threshold
+        global thresholded
+        thresholded = self.colorThreshold(image)
+
+        # apply gaussian blur
+        global gaussianBlur
+        kernel_size = 5
+        gaussianBlur = self.gaussian_blur(thresholded, kernel_size)
+
+        grayImage = self.grayscale(gaussianBlur)
+        
+        # canny
+        minThreshold = 150
+        maxThreshold = 230
+        global edgeDetectedImage
+        edgeDetectedImage = self.cannyEdgeDetection(grayImage, minThreshold, maxThreshold)
+
+        global dilatedImage
+        kernel_size = 3
+        iterations = 1
+        dilatedImage = self.dilate(edgeDetectedImage, kernel_size, iterations)
 
     def potholes(self, img, threshold):
         '''
@@ -61,7 +85,6 @@ class ADSDetection:
                 #cv2.circle(threshold,(i[0],i[1]),2,(0,0,255),3)
         return None
 
-
     def colorThreshold(self, img):
 
         hls = cv2.cvtColor(img, cv2.COLOR_BGR2HLS)
@@ -75,7 +98,43 @@ class ADSDetection:
         res = cv2.bitwise_and(hls, hls, mask= mask)
 
         return res
+    
+    def cannyEdgeDetection(self, img, minThreshold, maxThreshold):
+        return cv2.Canny(img, minThreshold, maxThreshold)
 
+    def grayscale(self, img):
+        """Applies the Grayscale transform
+        This will return an image with only one color channel
+        but NOTE: to see the returned image as grayscale
+        you should call plt.imshow(gray, cmap='gray')"""
+        # since the image will be in hls, we convert to bgr then gray
+        image = cv2.cvtColor(img, cv2.COLOR_HLS2BGR)
+        image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        return image
+
+    def gaussian_blur(self, img, kernel_size):
+        """Applies a Gaussian Noise kernel"""
+        return cv2.GaussianBlur(img, (kernel_size, kernel_size), 0)
+
+    def region_of_interest(self, img, vertices):
+        """
+        Applies an image mask.
+
+        Only keeps the region of the image defined by the polygon
+        formed from `vertices`. The rest of the image is set to black.
+        """
+        # decided to take this out for now since old definition of the region of
+        # interest is not the same as our region of interest now,
+        # feel free to add code here
+        mask = np.zeros_like(img)
+        match_mask_color = 255
+        cv2.fillPoly(mask, np.int32([vertices]), match_mask_color)
+        masked_image = cv2.bitwise_and(img, mask)
+        return masked_image
+    
+    def dilate(img, kernel_size, iterations):
+        return cv2.dilate(img, (kernel_size, kernel_size), iterations=iterations)
 
     def returnGaussianBlur(self, depth_image):
 
@@ -116,59 +175,12 @@ class ADSDetection:
 
         return masked_image
     
+    def returnDilatedImage(self, depth_image):
+        dilatedImage = cv2.cvtColor(dilatedImage, cv2.COLOR_HLS2BGR)
+        dilatedImage = cv2.cvtColor(cropdilatedImageped, cv2.COLOR_BGR2GRAY)
 
-    def __init__(self, image):
+        masked_image = cv2.bitwise_and(depth_image, depth_image, mask=dilatedImage)
 
-        # color threshold
-        global thresholded
-        thresholded = self.colorThreshold(image)
-
-        # apply gaussian blur
-        global gaussianBlur
-        kernelSize = 5
-        gaussianBlur = self.gaussian_blur(thresholded, kernelSize)
-
-        grayImage = self.grayscale(gaussianBlur)
-        
-        # canny
-        minThreshold = 150
-        maxThreshold = 230
-        global edgeDetectedImage
-        edgeDetectedImage = self.cannyEdgeDetection(grayImage, minThreshold, maxThreshold)
-
-    
-    def cannyEdgeDetection(self, img, minThreshold, maxThreshold):
-        return cv2.Canny(img, minThreshold, maxThreshold)
-
-    def grayscale(self, img):
-        """Applies the Grayscale transform
-        This will return an image with only one color channel
-        but NOTE: to see the returned image as grayscale
-        you should call plt.imshow(gray, cmap='gray')"""
-        # since the image will be in hls, we convert to bgr then gray
-        image = cv2.cvtColor(img, cv2.COLOR_HLS2BGR)
-        image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-        return image
-
-    def gaussian_blur(self, img, kernel_size):
-        """Applies a Gaussian Noise kernel"""
-        return cv2.GaussianBlur(img, (kernel_size, kernel_size), 0)
-
-    def region_of_interest(self, img, vertices):
-        """
-        Applies an image mask.
-
-        Only keeps the region of the image defined by the polygon
-        formed from `vertices`. The rest of the image is set to black.
-        """
-        # decided to take this out for now since old definition of the region of
-        # interest is not the same as our region of interest now,
-        # feel free to add code here
-        mask = np.zeros_like(image)
-        match_mask_color = 255
-        cv2.fillPoly(mask, np.int32([vertices]), match_mask_color)
-        masked_image = cv2.bitwise_and(image, mask)
         return masked_image
 
 camera_info_ros = CameraInfo()
