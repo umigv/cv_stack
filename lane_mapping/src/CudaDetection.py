@@ -5,7 +5,7 @@
 # import matplotlib.image as mpimg
 import rospy
 import sys
-from sensor_msgs.msg import Image, CameraInfo
+from sensor_msgs.msg import Image
 import numpy as np
 import cv2
 # import cupy as cp
@@ -23,30 +23,6 @@ from geometry_msgs.msg import Pose
 
 
 class ADSDetection:
-    
-    def __init__(self, image):
-
-        # color threshold
-        global thresholded
-        thresholded = self.colorThreshold(image)
-
-        # apply gaussian blur
-        global gaussianBlur
-        kernel_size = 5
-        gaussianBlur = self.gaussian_blur(thresholded, kernel_size)
-
-        grayImage = self.grayscale(gaussianBlur)
-
-        # canny
-        minThreshold = 150
-        maxThreshold = 230
-        global edgeDetectedImage
-        edgeDetectedImage = self.cannyEdgeDetection(grayImage, minThreshold, maxThreshold)
-
-        global dilatedImage
-        kernel_size = 3
-        iterations = 1
-        dilatedImage = self.dilate(edgeDetectedImage, kernel_size, iterations)
 
     def potholes(self, img, threshold):
         '''
@@ -85,6 +61,34 @@ class ADSDetection:
                 #cv2.circle(threshold,(i[0],i[1]),2,(0,0,255),3)
         return None
 
+
+#    def inRange_kernel(const cv::cuda::PtrStepSz<uchar3> src, cv::cuda::PtrStepSzb dst,
+#                               int lbc0, int ubc0, int lbc1, int ubc1, int lbc2, int ubc2):
+#        int x = blockIdx.x * blockDim.x + threadIdx.x
+#        int y = blockIdx.y * blockDim.y + threadIdx.y
+
+#        if (x >= src.cols | y >= src.rows) return
+
+#        uchar3 v = src(y, x)
+#        if (v.x >= lbc0 & v.x <= ubc0 & v.y >= lbc1 & v.y <= ubc1 & v.z >= lbc2 & v.z <= ubc2)
+#           dst(y, x) = 255
+#        else
+#           dst(y, x) = 0
+
+
+#    def inRange_gpu(cv::cuda::GpuMat &src, cv::Scalar &lowerb, cv::Scalar &upperb,
+#                 cv::cuda::GpuMat &dst):
+#      const int m = 32
+#      int numRows = src.rows, numCols = src.cols
+#      if (numRows == 0 | numCols == 0) return
+      # Attention! Cols Vs. Rows are reversed
+#      const dim3 gridSize(ceil((float)numCols / m), ceil((float)numRows / m), 1)
+#      const dim3 blockSize(m, m, 1)
+
+#      inRange_kernel<<<gridSize, blockSize>>>(src, dst, lowerb[0], upperb[0], lowerb[1], upperb[1],
+#                                          lowerb[2], upperb[2])
+
+
     def colorThreshold(self, img):
 
         hls = cv2.cvtColor(img, cv2.COLOR_BGR2HLS)
@@ -97,25 +101,96 @@ class ADSDetection:
         # Bitwise-AND mask and original image
         res = cv2.bitwise_and(hls, hls, mask= mask)
 
-        return res
+        gpu_frame = cv2.cuda_GpuMat()
+        gpu_frame.upload(res)
+
+        #morph = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel) #Can try this to clean up edges
+        return gpu_frame
+
+
+
+    def returnGaussianBlur(self, depth_image):
+        pulled_image = gaussianBlur.download()
+
+        masked_image = cv2.bitwise_and(depth_image, pulled_image)
+
+        return pulled_image
+
+    def returnEDImage(self, depth_image):
+        pulled_image = edgeDetectedImage.download()
+        
+        masked_image = cv2.bitwise_and(depth_image, pulled_image)
+        
+        return pulled_image
+
+    def returnHougedImage(self, depth_image):
+        pulled_image = houged.download()
+        
+        mask = np.ones_like(depth_image) * 255
+        masked_image = cv2.bitwise_and(depth_image, mask)
+        
+        return pulled_image
+
+    def returnThresholdedImage(self, depth_image):
+        pulled_image = thresholded.download()
+        
+        mask = np.ones_like(depth_image) * 255
+        masked_image = cv2.bitwise_and(depth_image, mask)
+        
+        return pulled_image
+
+    def returnCroppedImage(self, depth_image):
+        pulled_image = cropped.download()
+        
+        mask = np.ones_like(depth_image) * 255
+        masked_image = cv2.bitwise_and(depth_image, mask)
+        
+        return pulled_image
+    
+
+    def __init__(self, image):
+
+        # color threshold and upload to gpu
+        global thresholded
+        thresholded = self.colorThreshold(image)
+        
+        # apply gaussian blur
+        global gaussianBlur
+        kernelSize = 5
+        gaussianBlur = self.gaussian_blur(thresholded, kernelSize)
+
+        grayImage = self.grayscale(gaussianBlur)
+        
+        # canny
+        minThreshold = 150
+        maxThreshold = 230
+        global edgeDetectedImage
+        edgeDetectedImage = self.cannyEdgeDetection(grayImage, minThreshold, maxThreshold)
+
+
     
     def cannyEdgeDetection(self, img, minThreshold, maxThreshold):
-        return cv2.Canny(img, minThreshold, maxThreshold)
+        detector = cv2.cuda.createCannyEdgeDetector(minThreshold, maxThreshold)
+        return detector.detect(img)
 
     def grayscale(self, img):
+        pulled_image = img.download()
+
         """Applies the Grayscale transform
         This will return an image with only one color channel
         but NOTE: to see the returned image as grayscale
         you should call plt.imshow(gray, cmap='gray')"""
-        # since the image will be in hls, we convert to bgr then gray
-        image = cv2.cvtColor(img, cv2.COLOR_HLS2BGR)
-        image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        image = cv2.cvtColor(pulled_image, cv2.COLOR_BGR2GRAY)
+        gpu_frame = cv2.cuda_GpuMat()
+        gpu_frame.upload(image)
 
-        return image
+        return gpu_frame
 
-    def gaussian_blur(self, img, kernel_size):
+    def gaussian_blur(self, gpu_frame, kernel_size):
         """Applies a Gaussian Noise kernel"""
-        return cv2.GaussianBlur(img, (kernel_size, kernel_size), 0)
+        f = cv2.cuda.createGaussianFilter(gpu_frame.type(), gpu_frame.type(), (kernel_size, kernel_size), 150)
+        f.apply(gpu_frame, gpu_frame)
+        return gpu_frame
 
     def region_of_interest(self, img, vertices):
         """
@@ -127,103 +202,47 @@ class ADSDetection:
         # decided to take this out for now since old definition of the region of
         # interest is not the same as our region of interest now,
         # feel free to add code here
-        mask = np.zeros_like(img)
+        image = img.download()
+        mask = np.zeros_like(image)
         match_mask_color = 255
         cv2.fillPoly(mask, np.int32([vertices]), match_mask_color)
-        masked_image = cv2.bitwise_and(img, mask)
-        return masked_image
-    
-    def dilate(self, img, kernel_size, iterations):
-        return cv2.dilate(img, (kernel_size, kernel_size), iterations=iterations)
+        masked_image = cv2.bitwise_and(image, mask)
+        gpu_frame = cv2.cuda_GpuMat()
+        gpu_frame.upload(masked_image)
+        return gpu_frame
 
-    def returnGaussianBlur(self, depth_image):
+    def cannyEdgeDetection(self, img, minThreshold, maxThreshold):
+        #image = img.download()
+        detector = cv2.cuda.createCannyEdgeDetector(minThreshold, maxThreshold)
+        return detector.detect(img)
 
-        # there's no hls to gray conversion, so have to go to bgr first
-        # can also try extracting just the luminance column
-        gaussianBlur = cv2.cvtColor(gaussianBlur, cv2.COLOR_HLS2BGR)
-        gaussianBlur = cv2.cvtColor(gaussianBlur, cv2.COLOR_BGR2GRAY)
 
-        masked_image = cv2.bitwise_and(depth_image, depth_image, mask=gaussianBlur)
-
-        return masked_image
-
-    def returnEDImage(self, depth_image):
-
-        masked_image = cv2.bitwise_and(depth_image, depth_image, mask=edgeDetectedImage)
-
-        return masked_image
-
-    def returnThresholdedImage(self, depth_image):
-
-        # there's no hls to gray conversion, so have to go to bgr first
-        # can also try extracting just the luminance column
-        thresholded = cv2.cvtColor(thresholded, cv2.COLOR_HLS2BGR)
-        thresholded = cv2.cvtColor(thresholded, cv2.COLOR_BGR2GRAY)
-
-        masked_image = cv2.bitwise_and(depth_image, depth_image, mask=thresholded)
-
-        return masked_image
-
-    def returnCroppedImage(self, depth_image):
-
-        # there's no hls to gray conversion, so have to go to bgr first
-        # can also try extracting just the luminance column
-        cropped = cv2.cvtColor(cropped, cv2.COLOR_HLS2BGR)
-        cropped = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
-
-        masked_image = cv2.bitwise_and(depth_image, depth_image, mask=cropped)
-
-        return masked_image
-    
-    def returnDilatedImage(self, depth_image):
-        global dilatedImage
-
-        masked_image = cv2.bitwise_and(depth_image, depth_image, mask=dilatedImage)
-
-        return masked_image
-
-camera_info_ros = CameraInfo()
-transformed_ros = Image()
-
-def callback(image, depth_image, camera_info):
+def callback(image, depth_image):
     #rospy.loginfo("Converting perspective transformed img to edge detection image")
     bridge = CvBridge()
-    # timestamp = image.header.stamp
+    timestamp = image.header.stamp
     cv_image = bridge.imgmsg_to_cv2(image, desired_encoding='bgr8')
     depth_image = bridge.imgmsg_to_cv2(depth_image, desired_encoding='passthrough')
     ads = ADSDetection(cv_image)
-    publish_transform(bridge, ads.returnDilatedImage(depth_image))
-    """
-    we are publishing this because for some reason the depth.launch
-    file is looking for a topic with this exact name, even though
-    I feel that it should be able to find /zed/zed_node/depth/camera_info
-    This is a workaround, we are not editing the camera info at all
-    """
-    publish_camera_info(camera_info)
+    publish_transform(bridge, "/cv/laneMapping/left", ads.returnGaussianBlur(depth_image), timestamp)
+    # publish_transform(bridge, "/cv/laneMapping/left", ads.returnEDImage(), timestamp)
+    # publish_ogrid("/cv/laneMapping/ogrid", grid, timestamp)
 
-def publish_transform(bridge, cv2_img):
-    global transformed_ros
+def publish_transform(bridge, topic, cv2_img, timestamp):
     transformed_ros = bridge.cv2_to_imgmsg(cv2_img)
-    transformed_ros.header.frame_id = "zed_left_camera_optical_frame"
+    transformed_ros.header.stamp = timestamp
+    pub = rospy.Publisher(topic, Image, queue_size=1)
+    pub.publish(transformed_ros)
+    rospy.loginfo("Published transform")
 
-
-    # pub = rospy.Publisher(topic, Image, queue_size=1)
-    # pub.publish(transformed_ros)
-    # rospy.loginfo("Published transform")
-
-def publish_camera_info(camera_info):
-    global camera_info_ros
-    camera_info_ros = camera_info
-
-
-    # pub = rospy.Publisher(topic, CameraInfo, queue_size=1)
-    # pub.publish(camera_info)
-    # rospy.loginfo("Published camera info")
-
+def publish_ogrid(topic, ogrid_msg, timestamp):
+    ogrid_msg.header.stamp = timestamp
+    pub = rospy.Publisher(topic, OccupancyGrid, queue_size=1)
+    #rospy.loginfo(ogrid_msg.data)
+    pub.publish(ogrid_msg)
+    rospy.loginfo("Published ogrid")
 
 def listener():
-    global camera_info_ros
-    global transformed_ros
     # In ROS, nodes are uniquely named. If two nodes with the same
     # name are launched, the previous one is kicked off. The
     # anonymous=True flag means that rospy will choose a unique
@@ -231,33 +250,15 @@ def listener():
     # run simultaneously.
     rospy.init_node('ads_detection', anonymous=True)
     global POTHOLES_ENABLED
-    msg = "Initialized Cuda Detection: " + "No potholes" if not POTHOLES_ENABLED else "Potholes Enabled"
+    msg = "Initialized ADS Detection: " + "No potholes" if not POTHOLES_ENABLED else "Potholes Enabled"
     rospy.loginfo(msg)
 
     image_sub = message_filters.Subscriber("/zed/zed_node/left/image_rect_gray", Image, queue_size = 1, buff_size=2**24)
     # image_sub = message_filters.Subscriber("/zed/zed_node/left/image_rect_color", Image)
     depth_map_sub = message_filters.Subscriber("/zed/zed_node/depth/depth_registered", Image, queue_size = 1, buff_size=2**24)
     
-    camera_info_sub = message_filters.Subscriber("/zed/zed_node/depth/camera_info", CameraInfo, queue_size = 1, buff_size=2**24)
-    ts = message_filters.TimeSynchronizer([image_sub, depth_map_sub, camera_info_sub], 10)
+    ts = message_filters.TimeSynchronizer([image_sub, depth_map_sub], 10)
     ts.registerCallback(callback)
-
-    rate = rospy.Rate(10)
-    transform_pub = rospy.Publisher("/cv/laneMapping/left", Image, queue_size=1)
-    camera_info_pub = rospy.Publisher("/cv/laneMapping/camera_info", CameraInfo, queue_size=1)
-
-    log = rospy.get_param("log_info")
-
-    while not rospy.is_shutdown():
-        rate.sleep()
-        time = rospy.Time.now()
-        transformed_ros.header.stamp = time
-        camera_info_ros.header.stamp = time
-        transform_pub.publish(transformed_ros)
-        camera_info_pub.publish(camera_info_ros)
-        if log:
-            rospy.loginfo("Published transform and camera info")
-        
 
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()

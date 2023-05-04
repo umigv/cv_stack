@@ -8,7 +8,7 @@
 
   <node 
     pkg="lane_mapping" 
-    type="CudaDetection.py" 
+    type="LaneDetection.py" 
     name="lane_mapping" 
     respawn="true"
     args=""
