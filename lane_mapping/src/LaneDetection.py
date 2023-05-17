@@ -1,44 +1,46 @@
 #!/usr/bin/env python
 # file for lane detection without perspective transform
 # importing some useful packages
-# import matplotlib.pyplot as plt
-# import matplotlib.image as mpimg
 import rospy
 import sys
 from sensor_msgs.msg import Image, CameraInfo
 import numpy as np
 import cv2
-# import cupy as cp
-import math
 import sys
 from cv_bridge import CvBridge
-from rospy.numpy_msg import numpy_msg
 import message_filters
-from nav_msgs.msg import OccupancyGrid
-from nav_msgs.msg import MapMetaData
-from geometry_msgs.msg import Pose
 
 
-# Rajiv Andrew and David
-
+# The hard work of the CV subteam of UMARV
 
 class ADSDetection:
     
     def __init__(self, image, depth_image):
+        # dilate the depth_image
+        global depthMap
+        kernel_size = 11
+        iterations = 10
+        depthMap = self.dilate(depth_image, kernel_size, iterations)
 
         # color threshold
-        minThreshold = 150
+        minThreshold = 230
         maxThreshold = 255
         global thresholded
         thresholded = self.colorThreshold(image, minThreshold, maxThreshold)
 
-        # apply gaussian blur
-        global gaussianBlur
-        kernel_size = 5
-        gaussianBlur = self.gaussian_blur(thresholded, kernel_size)
-
         # grayscale
-        grayImage = self.grayscale(gaussianBlur)
+        grayImage = self.grayscale(thresholded)
+
+        # crop the image
+        height = image.shape[0]
+        width = image.shape[1]
+        region_of_interest_vertices = [
+            (0, height),
+            (0, int(height/5)),
+            (width, int(height/ 5)),
+            (width, height),
+        ]
+        cropped = self.region_of_interest(grayImage, np.array([region_of_interest_vertices]))
 
         # # canny
         # minThreshold = 150
@@ -47,19 +49,30 @@ class ADSDetection:
         # edgeDetectedImage = self.cannyEdgeDetection(grayImage, minThreshold, maxThreshold)
 
         global maskedImage
-        maskedImage = cv2.bitwise_and(depth_image, depth_image, mask=grayImage)
+        maskedImage = self.mask(depth_image, cropped)
+
+        # if count == 100:
+        #     # output_cropped = self.mask(cropped, depth_image.astype(np.uint8))
+        #     path = "./depth_image.png"
+        #     worked1 = cv2.imwrite(path, depth_image)
+        #     path = "./cropped.png"
+        #     worked2 = cv2.imwrite(path, cropped)
+        #     rospy.loginfo(worked1)
+        #     rospy.loginfo(worked2)
+        #     rospy.loginfo("image written")
+        # count += 1
 
         global dilatedImage
         kernel_size = 5
-        iterations = 5
-        dilatedImage = self.dilate(maskedImage, kernel_size, iterations)
-        # dilatedImage = maskedImage
+        iterations = 1
+        dilatedImage = cv2.morphologyEx(maskedImage, cv2.MORPH_OPEN, (kernel_size, kernel_size))
+        dilatedImage = self.dilate(dilatedImage, kernel_size, iterations)
+        # dilatedImage = maskedImage 
 
     def colorThreshold(self, img, minThreshold, maxThreshold):
 
         hls = cv2.cvtColor(img, cv2.COLOR_BGR2HLS)
-        # define range of white color in HSV
-        # change it according to your need !
+        # define range of white color in HLS
         lower_white = np.array([0,minThreshold,0], dtype=np.uint8)
         upper_white = np.array([255,maxThreshold,255], dtype=np.uint8)
         # Threshold the HSV image to get only white colors
@@ -68,6 +81,31 @@ class ADSDetection:
         res = cv2.bitwise_and(hls, hls, mask= mask)
 
         return res
+    
+    def region_of_interest(self,img, vertices):
+        """
+        Applies an image mask.
+
+        Only keeps the region of the image defined by the polygon
+        formed from `vertices`. The rest of the image is set to black.
+        """
+        #defining a blank mask to start with
+        mask = np.zeros_like(img)
+
+        #defining a 3 channel or 1 channel color to fill the mask with
+        #depending on the input image
+        if len(img.shape) > 2:
+            channel_count = img.shape[2]  # i.e. 3 or 4 depending on your image
+            ignore_mask_color = (255,) * channel_count
+        else:
+            ignore_mask_color = 255
+
+        #filling pixels inside the polygon defined by "vertices" with the fill color
+        cv2.fillPoly(mask, np.int32([vertices]), ignore_mask_color)
+
+        #returning the image only where mask pixels are nonzero
+        masked_image = cv2.bitwise_and(img, mask)
+        return masked_image
     
     def cannyEdgeDetection(self, img, minThreshold, maxThreshold):
         return cv2.Canny(img, minThreshold, maxThreshold)
@@ -87,10 +125,14 @@ class ADSDetection:
         """Applies a Gaussian Noise kernel"""
         return cv2.GaussianBlur(img, (kernel_size, kernel_size), 0)
     
+    def mask(self, depth_image, mask):
+        return cv2.bitwise_and(depth_image, depth_image, mask=mask)
+    
     def dilate(self, img, kernel_size, iterations):
         return cv2.dilate(img, (kernel_size, kernel_size), iterations=iterations)
 
     def returnThresholdedImage(self):
+        global thresholded
 
         # there's no hls to gray conversion, so have to go to bgr first
         # can also try extracting just the luminance column
@@ -98,8 +140,13 @@ class ADSDetection:
         thresholded = cv2.cvtColor(thresholded, cv2.COLOR_BGR2GRAY)
 
         return thresholded
+    
+    def returnDepthMap(self):
+        global depthMap
+        return depthMap
 
     def returnGaussianBlur(self):
+        global gaussianBlur
 
         # there's no hls to gray conversion, so have to go to bgr first
         # can also try extracting just the luminance column
@@ -109,12 +156,11 @@ class ADSDetection:
         return gaussianBlur
 
     def returnEDImage(self):
-
+        global edgeDetectedImage
         return edgeDetectedImage
     
     def returnDilatedImage(self):
         global dilatedImage
-
         return dilatedImage
 
 camera_info_ros = CameraInfo()
@@ -142,7 +188,6 @@ def publish_transform(bridge, cv2_img):
     transformed_ros = bridge.cv2_to_imgmsg(cv2_img)
     transformed_ros.header.frame_id = "zed_left_camera_optical_frame"
 
-
     # pub = rospy.Publisher(topic, Image, queue_size=1)
     # pub.publish(transformed_ros)
     # rospy.loginfo("Published transform")
@@ -150,7 +195,6 @@ def publish_transform(bridge, cv2_img):
 def publish_camera_info(camera_info):
     global camera_info_ros
     camera_info_ros = camera_info
-
 
     # pub = rospy.Publisher(topic, CameraInfo, queue_size=1)
     # pub.publish(camera_info)
@@ -160,6 +204,8 @@ def publish_camera_info(camera_info):
 def listener():
     global camera_info_ros
     global transformed_ros
+    global count
+    count = 0
     # In ROS, nodes are uniquely named. If two nodes with the same
     # name are launched, the previous one is kicked off. The
     # anonymous=True flag means that rospy will choose a unique
