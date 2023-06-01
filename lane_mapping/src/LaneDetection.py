@@ -18,29 +18,44 @@ class ADSDetection:
     def __init__(self, image, depth_image):
         # dilate the depth_image
         global depthMap
-        kernel_size = 11
-        iterations = 10
-        depthMap = self.dilate(depth_image, kernel_size, iterations)
+        kernel_size = 5
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+        iterations = 4
+        depthMap = self.dilate(depth_image, kernel, iterations)
+
+        global gaussianBlur
+        kernel_size = 3
+        gaussianBlur = self.gaussian_blur(image, kernel_size)
 
         # color threshold
-        minThreshold = 230
+        minThreshold = 200
         maxThreshold = 255
         global thresholded
-        thresholded = self.colorThreshold(image, minThreshold, maxThreshold)
+        thresholded = self.colorThreshold(gaussianBlur, minThreshold, maxThreshold)
 
-        # grayscale
-        grayImage = self.grayscale(thresholded)
+        kernel_size = 2
+        iterations = 11
+        kernel = np.ones((kernel_size, kernel_size), np.uint8)
+        thresholded = cv2.morphologyEx(thresholded, cv2.MORPH_OPEN, kernel)
+        thresholded = self.dilate(thresholded, kernel, iterations)
+        
 
+        global cropped
         # crop the image
         height = image.shape[0]
         width = image.shape[1]
         region_of_interest_vertices = [
+            (int(width/2), int(5*height/6)),
             (0, height),
             (0, int(height/5)),
             (width, int(height/ 5)),
             (width, height),
         ]
-        cropped = self.region_of_interest(grayImage, np.array([region_of_interest_vertices]))
+
+        cropped = self.region_of_interest(thresholded, np.array([region_of_interest_vertices]))
+
+        # grayscale
+        cropped = self.grayscale(cropped)
 
         # # canny
         # minThreshold = 150
@@ -49,25 +64,38 @@ class ADSDetection:
         # edgeDetectedImage = self.cannyEdgeDetection(grayImage, minThreshold, maxThreshold)
 
         global maskedImage
-        maskedImage = self.mask(depth_image, cropped)
+        maskedImage = self.mask(depthMap, cropped.astype(np.uint8))
 
-        # if count == 100:
+        # global count
+        # global cur_image
+        # if count > 100 and count % 30 == 0:
         #     # output_cropped = self.mask(cropped, depth_image.astype(np.uint8))
-        #     path = "./depth_image.png"
+        #     path = f"./depth_image{cur_image}.png"
         #     worked1 = cv2.imwrite(path, depth_image)
-        #     path = "./cropped.png"
+        #     path = f"./cropped{cur_image}.png"
         #     worked2 = cv2.imwrite(path, cropped)
         #     rospy.loginfo(worked1)
         #     rospy.loginfo(worked2)
         #     rospy.loginfo("image written")
+        #     cur_image += 1
         # count += 1
 
-        global dilatedImage
-        kernel_size = 5
-        iterations = 1
-        dilatedImage = cv2.morphologyEx(maskedImage, cv2.MORPH_OPEN, (kernel_size, kernel_size))
-        dilatedImage = self.dilate(dilatedImage, kernel_size, iterations)
+        # global dilatedImage
+        # if we're using dilation
+
+        # kernel_size = 5
+        # kernel = np.ones((kernel_size, kernel_size), np.uint8)
+        # iterations = 3
+        # dilatedImage = cv2.morphologyEx(maskedImage, cv2.MORPH_OPEN, (kernel_size, kernel_size))
+        # dilatedImage = self.dilate(dilatedImage, kernel, iterations)
+
+        # no dilation
         # dilatedImage = maskedImage 
+
+        # # image for display, not for use in pipeline
+        # global displayImage
+        # displayImage = dilatedImage
+        # displayImage[displayImage > 0] = 255
 
     def colorThreshold(self, img, minThreshold, maxThreshold):
 
@@ -123,13 +151,13 @@ class ADSDetection:
 
     def gaussian_blur(self, img, kernel_size):
         """Applies a Gaussian Noise kernel"""
-        return cv2.GaussianBlur(img, (kernel_size, kernel_size), 0)
+        return cv2.GaussianBlur(img, (kernel_size, kernel_size), 200)
     
     def mask(self, depth_image, mask):
         return cv2.bitwise_and(depth_image, depth_image, mask=mask)
     
-    def dilate(self, img, kernel_size, iterations):
-        return cv2.dilate(img, (kernel_size, kernel_size), iterations=iterations)
+    def dilate(self, img, kernel, iterations):
+        return cv2.dilate(img, kernel, iterations=iterations)
 
     def returnThresholdedImage(self):
         global thresholded
@@ -154,14 +182,22 @@ class ADSDetection:
         gaussianBlur = cv2.cvtColor(gaussianBlur, cv2.COLOR_BGR2GRAY)
 
         return gaussianBlur
+    
+    def returnCroppedImage(self):
+        global cropped
+        return cropped
 
     def returnEDImage(self):
         global edgeDetectedImage
         return edgeDetectedImage
     
-    def returnDilatedImage(self):
-        global dilatedImage
-        return dilatedImage
+    def returnMaskedImage(self):
+        global maskedImage
+        return maskedImage
+    
+    def returnDisplayImage(self):
+        global displayImage
+        return displayImage
 
 camera_info_ros = CameraInfo()
 transformed_ros = Image()
@@ -174,11 +210,11 @@ def callback(image, depth_image, camera_info):
     depth_image = bridge.imgmsg_to_cv2(depth_image, desired_encoding='passthrough')
     # depth_image = cv2.dilate(depth_image, (5, 5), iterations=10)
     ads = ADSDetection(cv_image, depth_image)
-    publish_transform(bridge, ads.returnDilatedImage())
+    publish_transform(bridge, ads.returnCroppedImage())
     """
     we are publishing this because for some reason the depth.launch
     file is looking for a topic with this exact name, even though
-    I feel that it should be able to find /zed/zed_node/depth/camera_info
+    I feel that it should be able to find /zed2i/zed_node/depth/camera_info
     This is a workaround, we are not editing the camera info at all
     """
     publish_camera_info(camera_info)
@@ -205,6 +241,8 @@ def listener():
     global camera_info_ros
     global transformed_ros
     global count
+    global cur_image
+    cur_image = 1
     count = 0
     # In ROS, nodes are uniquely named. If two nodes with the same
     # name are launched, the previous one is kicked off. The
@@ -216,11 +254,11 @@ def listener():
     msg = "Initialized Lane Detection: " + "No potholes" if not POTHOLES_ENABLED else "Potholes Enabled"
     rospy.loginfo(msg)
 
-    image_sub = message_filters.Subscriber("/zed/zed_node/left/image_rect_gray", Image, queue_size = 1, buff_size=2**24)
-    # image_sub = message_filters.Subscriber("/zed/zed_node/left/image_rect_color", Image)
-    depth_map_sub = message_filters.Subscriber("/zed/zed_node/depth/depth_registered", Image, queue_size = 1, buff_size=2**24)
+    image_sub = message_filters.Subscriber("/zed2i/zed_node/left/image_rect_gray", Image, queue_size = 1, buff_size=2**24)
+    # image_sub = message_filters.Subscriber("/zed2i/zed_node/left/image_rect_color", Image)
+    depth_map_sub = message_filters.Subscriber("/zed2i/zed_node/depth/depth_registered", Image, queue_size = 1, buff_size=2**24)
 
-    camera_info_sub = message_filters.Subscriber("/zed/zed_node/depth/camera_info", CameraInfo, queue_size = 1, buff_size=2**24)
+    camera_info_sub = message_filters.Subscriber("/zed2i/zed_node/depth/camera_info", CameraInfo, queue_size = 1, buff_size=2**24)
     ts = message_filters.TimeSynchronizer([image_sub, depth_map_sub, camera_info_sub], 10)
     ts.registerCallback(callback)
 

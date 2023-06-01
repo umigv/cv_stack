@@ -38,5 +38,5 @@
     <remap from="depth_registered/image_rect" to="/zed/zed_node/depth/depth_registered"/>
     <remap from="depth_registered/points" to="/camera/depth/points"/>
   </node> -->
-  <include file="$(find cv_full)/launch/cv_rviz.launch"/>
+  <!-- <include file="$(find cv_full)/launch/cv_rviz.launch"/> -->
 </launch>
